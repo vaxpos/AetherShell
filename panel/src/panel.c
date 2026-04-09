@@ -11,6 +11,7 @@
 #include "resource_paths.h"
 #include "volume_indicator.h"
 #include "mic_indicator.h"
+#include "wifi_indicator.h"
 
 static GtkWidget *time_label;
 static const gint PANEL_HEIGHT = 32;
@@ -274,6 +275,10 @@ int main(int argc, char *argv[]) {
     // SNI tray is intentionally created last so it starts after the rest of the panel UI.
     GtkWidget *sni_tray = create_sni_tray_widget();
     gtk_box_pack_start(GTK_BOX(right_box), sni_tray, FALSE, FALSE, 0);
+
+    // Wifi indicator
+    GtkWidget *wifi_widget = create_wifi_indicator_widget();
+    gtk_box_pack_start(GTK_BOX(right_box), wifi_widget, FALSE, FALSE, 0);
 
     // Mic indicator
     GtkWidget *mic_widget = create_mic_indicator_widget();

@@ -322,7 +322,7 @@ separator {
 
 /* ── Volume Indicator (panel button) ──────────────────────────────────────── */
 
-#volume-indicator-btn, #mic-indicator-btn {
+#volume-indicator-btn, #mic-indicator-btn, #wifi-indicator-btn {
     background-color: transparent;
     border: none;
     box-shadow: none;
@@ -333,18 +333,18 @@ separator {
     min-height: 24px;
 }
 
-#volume-indicator-btn:hover, #mic-indicator-btn:hover {
+#volume-indicator-btn:hover, #mic-indicator-btn:hover, #wifi-indicator-btn:hover {
     background-color: rgba(255, 255, 255, 0.08);
     color: #ffffff;
 }
 
 /* ── Volume Mixer popup ────────────────────────────────────────────────────── */
 
-#volume-mixer-window, #mic-mixer-window {
+#volume-mixer-window, #mic-mixer-window, #wifi-indicator-window {
     background-color: transparent;
 }
 
-#mixer-outer, #mic-mixer-outer {
+#mixer-outer, #mic-mixer-outer, #wifi-popup-outer {
     background-color: rgba(12, 12, 14, 0.92);
     border: 1px solid rgba(255, 255, 255, 0.10);
     border-radius: 14px;
@@ -352,24 +352,24 @@ separator {
     min-width: 320px;
 }
 
-#mixer-header, #mic-mixer-header {
+#mixer-header, #mic-mixer-header, #wifi-popup-header {
     padding: 12px 16px 10px 16px;
 }
 
-#mixer-title, #mic-mixer-title {
+#mixer-title, #mic-mixer-title, #wifi-popup-title {
     font-size: 13px;
     font-weight: 700;
     color: #ffffff;
     letter-spacing: 0.4px;
 }
 
-#mixer-sep, #mic-mixer-sep {
+#mixer-sep, #mic-mixer-sep, #wifi-popup-sep {
     background-color: rgba(255, 255, 255, 0.08);
     min-height: 1px;
     margin: 0;
 }
 
-#mixer-list, #mic-mixer-list {
+#mixer-list, #mic-mixer-list, #wifi-popup-info {
     padding: 4px 0;
 }
 
@@ -387,12 +387,12 @@ separator {
     margin-right: 2px;
 }
 
-#mixer-app-name, #mic-mixer-app-name {
-    font-size: 12px;
+#mixer-app-name, #mic-mixer-app-name, #wifi-info-ssid {
+    font-size: 13px;
     color: #cccccc;
 }
 
-#mixer-vol-value, #mic-mixer-vol-value {
+#mixer-vol-value, #mic-mixer-vol-value, #wifi-info-val {
     font-size: 11px;
     font-weight: bold;
     color: #888888;

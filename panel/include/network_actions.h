@@ -39,4 +39,18 @@ void network_wifi_connect(const gchar *ssid, const gchar *bssid,
 /* Free a list returned via WifiScanCallback */
 void network_wifi_networks_free(GList *list);
 
+/* ── Active WiFi Poller ──────────────────────────────────────────────────── */
+
+typedef struct {
+    gchar   *ssid;
+    guchar   strength;
+    guint32  frequency;
+    gboolean is_5ghz;
+} WifiActiveInfo;
+
+typedef void (*WifiActiveInfoCallback)(WifiActiveInfo *info, gpointer user_data);
+
+/* Watch the active WiFi connection and notify changes via cb */
+void network_watch_active_wifi(WifiActiveInfoCallback cb, gpointer user_data);
+
 #endif // NETWORK_ACTIONS_H

@@ -493,3 +493,89 @@ void network_wifi_connect(const gchar *ssid, const gchar *bssid, const gchar *pa
 
     g_free(cmd);
 }
+
+/* ─────────────────────────────────────────────────────────────────────────── */
+/* Active WiFi polling                                                         */
+/* ─────────────────────────────────────────────────────────────────────────── */
+
+static WifiActiveInfoCallback active_wifi_cb = NULL;
+static gpointer active_wifi_user_data = NULL;
+static GDBusConnection *active_wifi_bus = NULL;
+static gchar *active_wifi_dev_path = NULL;
+
+static gboolean poll_active_wifi(gpointer user_data)
+{
+    (void)user_data;
+    if (!active_wifi_bus || !active_wifi_dev_path) return G_SOURCE_CONTINUE;
+
+    GVariant *active_ap_v = get_dbus_property(active_wifi_bus, NM_DBUS_SERVICE, active_wifi_dev_path, NM_DEV_WIRELESS_IFACE, "ActiveAccessPoint");
+    
+    if (!active_ap_v) {
+        if (active_wifi_cb) active_wifi_cb(NULL, active_wifi_user_data);
+        return G_SOURCE_CONTINUE;
+    }
+
+    gchar *ap_path = g_strdup(g_variant_get_string(active_ap_v, NULL));
+    g_variant_unref(active_ap_v);
+
+    if (g_strcmp0(ap_path, "/") == 0) {
+        if (active_wifi_cb) active_wifi_cb(NULL, active_wifi_user_data);
+        g_free(ap_path);
+        return G_SOURCE_CONTINUE;
+    }
+
+    GVariant *ssid_v = get_dbus_property(active_wifi_bus, NM_DBUS_SERVICE, ap_path, NM_AP_IFACE, "Ssid");
+    GVariant *str_v  = get_dbus_property(active_wifi_bus, NM_DBUS_SERVICE, ap_path, NM_AP_IFACE, "Strength");
+    GVariant *freq_v = get_dbus_property(active_wifi_bus, NM_DBUS_SERVICE, ap_path, NM_AP_IFACE, "Frequency");
+
+    WifiActiveInfo info;
+    info.ssid = NULL;
+    info.strength = 0;
+    info.frequency = 0;
+    info.is_5ghz = FALSE;
+
+    if (ssid_v) {
+        gsize len = 0;
+        const guchar *bytes = g_variant_get_fixed_array(ssid_v, &len, 1);
+        info.ssid = g_strndup((const gchar *)bytes, len);
+        g_variant_unref(ssid_v);
+    }
+    if (str_v) {
+        info.strength = g_variant_get_byte(str_v);
+        g_variant_unref(str_v);
+    }
+    if (freq_v) {
+        info.frequency = g_variant_get_uint32(freq_v);
+        g_variant_unref(freq_v);
+        if (info.frequency >= 4000) {
+            info.is_5ghz = TRUE;
+        }
+    }
+
+    if (active_wifi_cb) active_wifi_cb(&info, active_wifi_user_data);
+
+    g_free(info.ssid);
+    g_free(ap_path);
+    return G_SOURCE_CONTINUE;
+}
+
+void network_watch_active_wifi(WifiActiveInfoCallback cb, gpointer user_data)
+{
+    active_wifi_cb = cb;
+    active_wifi_user_data = user_data;
+
+    if (!active_wifi_bus) {
+        GError *err = NULL;
+        active_wifi_bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, &err);
+        if (err) { g_error_free(err); return; }
+    }
+
+    if (!active_wifi_dev_path) {
+        active_wifi_dev_path = find_wifi_device_path(active_wifi_bus);
+    }
+
+    if (active_wifi_bus && active_wifi_dev_path) {
+        g_timeout_add_seconds(3, poll_active_wifi, NULL);
+        poll_active_wifi(NULL);
+    }
+}
