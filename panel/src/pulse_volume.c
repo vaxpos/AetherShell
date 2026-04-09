@@ -406,6 +406,93 @@ void pulse_volume_set(int percent)
     if (o) pa_operation_unref(o);
 }
 
+const char *pulse_get_default_sink_name(void)
+{
+    return m_sink_name;
+}
+
+void pulse_sinks_free(GList *list)
+{
+    for (GList *l = list; l; l = l->next) {
+        AudioSinkInfo *si = l->data;
+        g_free(si->sink_name);
+        g_free(si->port_name);
+        g_free(si->description);
+        g_free(si);
+    }
+    g_list_free(list);
+}
+
+struct audio_sink_req {
+    SinksFetchedCallback cb;
+    gpointer user_data;
+    GList *list;
+};
+
+static void get_sinks_cb(pa_context *c, const pa_sink_info *i, int eol, void *userdata)
+{
+    (void)c;
+    struct audio_sink_req *req = userdata;
+    if (eol > 0) {
+        if (req->cb) req->cb(req->list, req->user_data);
+        g_free(req);
+        return;
+    }
+    if (i) {
+        gboolean is_default_sink = (m_sink_name && g_strcmp0(m_sink_name, i->name) == 0);
+        
+        if (i->n_ports > 0) {
+            for (uint32_t j = 0; j < i->n_ports; j++) {
+                pa_sink_port_info *port = i->ports[j];
+                if (port->available == PA_PORT_AVAILABLE_NO) continue;
+
+                AudioSinkInfo *si = g_new0(AudioSinkInfo, 1);
+                si->sink_name = g_strdup(i->name);
+                si->port_name = g_strdup(port->name);
+                si->description = g_strdup(port->description);
+                si->is_active = is_default_sink && (i->active_port && g_strcmp0(i->active_port->name, port->name) == 0);
+                req->list = g_list_append(req->list, si);
+            }
+        } else {
+            AudioSinkInfo *si = g_new0(AudioSinkInfo, 1);
+            si->sink_name = g_strdup(i->name);
+            si->port_name = NULL;
+            si->description = g_strdup(i->description);
+            si->is_active = is_default_sink;
+            req->list = g_list_append(req->list, si);
+        }
+    }
+}
+
+void pulse_sinks_get(SinksFetchedCallback cb, gpointer user_data)
+{
+    if (!m_context || pa_context_get_state(m_context) != PA_CONTEXT_READY) {
+        if (cb) cb(NULL, user_data);
+        return;
+    }
+    struct audio_sink_req *req = g_new0(struct audio_sink_req, 1);
+    req->cb = cb;
+    req->user_data = user_data;
+    req->list = NULL;
+    pa_operation *o = pa_context_get_sink_info_list(m_context, get_sinks_cb, req);
+    if (o) pa_operation_unref(o);
+}
+
+void pulse_device_set(const char *sink_name, const char *port_name)
+{
+    if (!m_context || pa_context_get_state(m_context) != PA_CONTEXT_READY) return;
+    
+    if (sink_name) {
+        pa_operation *o = pa_context_set_default_sink(m_context, sink_name, NULL, NULL);
+        if (o) pa_operation_unref(o);
+    }
+    
+    if (sink_name && port_name) {
+        pa_operation *o2 = pa_context_set_sink_port_by_name(m_context, sink_name, port_name, NULL, NULL);
+        if (o2) pa_operation_unref(o2);
+    }
+}
+
 void pulse_sink_input_set_volume(uint32_t index, int percent)
 {
     if (!m_context || pa_context_get_state(m_context) != PA_CONTEXT_READY) return;

@@ -13,6 +13,19 @@ void pulse_volume_set(int percent);
 int  pulse_volume_get_current(void);   /* returns cached %, or -1 */
 gboolean pulse_volume_is_muted(void);  /* returns cached mute state */
 
+typedef struct {
+    gchar *sink_name;
+    gchar *port_name;
+    gchar *description;
+    gboolean is_active;
+} AudioSinkInfo;
+
+typedef void (*SinksFetchedCallback)(GList *devices, gpointer user_data);
+void pulse_sinks_get(SinksFetchedCallback cb, gpointer user_data);
+void pulse_device_set(const char *sink_name, const char *port_name);
+const char *pulse_get_default_sink_name(void);
+void pulse_sinks_free(GList *list);
+
 /* ── Per-application sink-input (mixer) ──────────────────────────────────── */
 
 typedef struct {

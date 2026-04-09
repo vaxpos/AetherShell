@@ -327,6 +327,82 @@ static void on_snd_scale_changed(GtkRange *range, gpointer user_data) {
     pulse_volume_set((int)val);
 }
 
+static GtkWidget *snd_out_menu = NULL;
+static GtkWidget *btn_snd_out = NULL;
+
+static void on_snd_out_item_activated(GtkMenuItem *item, gpointer user_data) {
+    (void)user_data;
+    const char *sink_name = g_object_get_data(G_OBJECT(item), "sink_name");
+    const char *port_name = g_object_get_data(G_OBJECT(item), "port_name");
+
+    if (sink_name) {
+        pulse_device_set(sink_name, port_name);
+    }
+}
+
+static void on_sinks_fetched(GList *sinks, gpointer user_data) {
+    (void)user_data;
+    if (!snd_out_menu) return;
+
+    GList *children = gtk_container_get_children(GTK_CONTAINER(snd_out_menu));
+    for (GList *iter = children; iter != NULL; iter = g_list_next(iter)) {
+        gtk_widget_destroy(GTK_WIDGET(iter->data));
+    }
+    g_list_free(children);
+
+    for (GList *l = sinks; l != NULL; l = l->next) {
+        AudioSinkInfo *si = l->data;
+        GtkWidget *item = gtk_menu_item_new();
+        
+        GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+        gtk_widget_set_margin_start(box, 8);
+        gtk_widget_set_margin_end(box, 8);
+        gtk_widget_set_margin_top(box, 6);
+        gtk_widget_set_margin_bottom(box, 6);
+
+        GtkWidget *icon = gtk_image_new_from_icon_name("audio-speakers-symbolic", GTK_ICON_SIZE_MENU);
+        GtkWidget *label = gtk_label_new(si->description ? si->description : (si->port_name ? si->port_name : si->sink_name));
+        gtk_widget_set_halign(label, GTK_ALIGN_START);
+
+        gtk_box_pack_start(GTK_BOX(box), icon, FALSE, FALSE, 0);
+        gtk_box_pack_start(GTK_BOX(box), label, TRUE, TRUE, 0);
+
+        if (si->is_active) {
+            GtkWidget *connected_icon = gtk_image_new_from_icon_name("emblem-ok-symbolic", GTK_ICON_SIZE_MENU);
+            gtk_box_pack_end(GTK_BOX(box), connected_icon, FALSE, FALSE, 0);
+        }
+
+        gtk_container_add(GTK_CONTAINER(item), box);
+        g_object_set_data_full(G_OBJECT(item), "sink_name", g_strdup(si->sink_name), g_free);
+        if (si->port_name) {
+            g_object_set_data_full(G_OBJECT(item), "port_name", g_strdup(si->port_name), g_free);
+        }
+
+        g_signal_connect(item, "activate", G_CALLBACK(on_snd_out_item_activated), NULL);
+        gtk_menu_shell_append(GTK_MENU_SHELL(snd_out_menu), item);
+    }
+    
+    if (!sinks) {
+        GtkWidget *item = gtk_menu_item_new_with_label("No devices found");
+        gtk_widget_set_sensitive(item, FALSE);
+        gtk_menu_shell_append(GTK_MENU_SHELL(snd_out_menu), item);
+    }
+
+    gtk_widget_show_all(snd_out_menu);
+    gtk_menu_popup_at_widget(GTK_MENU(snd_out_menu), btn_snd_out, GDK_GRAVITY_SOUTH_WEST, GDK_GRAVITY_NORTH_WEST, NULL);
+
+    pulse_sinks_free(sinks);
+}
+
+static void on_snd_out_clicked(GtkButton *btn, gpointer user_data) {
+    (void)btn; (void)user_data;
+    if (!snd_out_menu) {
+        snd_out_menu = gtk_menu_new();
+        gtk_style_context_add_class(gtk_widget_get_style_context(snd_out_menu), "wifi-menu");
+    }
+    pulse_sinks_get(on_sinks_fetched, NULL);
+}
+
 static void on_pulse_volume_changed(int percent, gboolean muted, gpointer user_data) {
     (void)user_data;
     updating_from_pulse = TRUE;
@@ -778,6 +854,14 @@ static GtkWidget* create_controls_page() {
     gtk_style_context_add_class(gtk_widget_get_style_context(lbl_snd), "slider-panel-title");
     gtk_box_pack_start(GTK_BOX(box_snd_lbl), icon_snd, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box_snd_lbl), lbl_snd, FALSE, FALSE, 0);
+
+    GtkWidget *snd_spacer = gtk_label_new("");
+    gtk_widget_set_hexpand(snd_spacer, TRUE);
+    btn_snd_out = create_icon_button("view-more-symbolic", NULL);
+    gtk_widget_set_size_request(btn_snd_out, 30, 30);
+    g_signal_connect(btn_snd_out, "clicked", G_CALLBACK(on_snd_out_clicked), NULL);
+    gtk_box_pack_start(GTK_BOX(box_snd_lbl), snd_spacer, TRUE, TRUE, 0);
+    gtk_box_pack_start(GTK_BOX(box_snd_lbl), btn_snd_out, FALSE, FALSE, 0);
 
     GtkWidget *box_snd_slider = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
     GtkWidget *icon_note = gtk_image_new_from_icon_name("audio-x-generic-symbolic", GTK_ICON_SIZE_BUTTON);
