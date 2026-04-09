@@ -1,0 +1,457 @@
+window {
+    background-color: rgba(0, 0, 0, 0);
+}
+
+#panel-bar {
+    background-color: rgba(0, 0, 0, 0);
+}
+
+#panel-content {
+    background-color: rgba(0, 0, 0, 0);
+}
+
+#keyboard-layout-box {
+    background-color: rgba(0, 0, 0, 0.3);
+    border: none;
+    border-radius: 999px;
+    padding: 2px 10px;
+}
+
+#keyboard-layout-label {
+    color: #f5f7fa;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.8px;
+}
+
+popover,
+popover.background {
+    background-color: transparent;
+    background-image: none;
+    border: none;
+    box-shadow: none;
+}
+
+popover contents {
+    background-color: transparent;
+    background-image: none;
+    border: none;
+    box-shadow: none;
+    padding: 0;
+}
+
+#main-box {
+    /*background-color: rgba(0, 0, 0, 0.392);*/
+    background-color: rgba(0, 0, 0, 0.012);
+    border: 1px solid #222222;
+    box-shadow: none;
+    padding: 8px;
+}
+
+.header-box {
+    margin-bottom: 24px;
+}
+
+.app-title {
+    font-weight: 800;
+    font-size: 16px;
+    color: #ffffff;
+    letter-spacing: 0.5px;
+}
+
+.tab-button {
+    color: #888888;
+    font-size: 13px;
+    background: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 0 0 6px 0;
+    border-radius: 0;
+    margin-left: 16px;
+}
+
+.tab-button:hover {
+    color: #ffffff;
+    background: transparent;
+}
+
+.tab-button.tab-active {
+    color: #00e5ff;
+    font-weight: bold;
+    border-bottom: 2px solid #00e5ff;
+}
+
+.card {
+    background-color: rgba(0, 0, 0, 0.24);
+    border-radius: 16px;
+    padding: 16px;
+}
+
+.circular-icon-btn {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    color: #888888;
+    border-radius: 50%;
+    min-width: 40px;
+    min-height: 40px;
+    padding: 0;
+
+    margin-top: 0px;
+}
+
+.circular-icon-btn:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+}
+
+.circular-icon-btn.active-cyan {
+    color: #00e5ff;
+    border: 1px solid rgba(0, 229, 255, 0.3);
+    box-shadow: 0 0 12px rgba(0, 229, 255, 0.15);
+}
+
+.perf-title {
+    font-size: 12px;
+    font-weight: bold;
+    color: #b0b0b0;
+    margin-bottom: 8px;
+}
+
+.perf-icon {
+    font-size: 18px;
+    color: #888888;
+    margin-bottom: 4px;
+}
+
+.perf-label {
+    font-size: 11px;
+    color: #888888;
+}
+
+.active-cyan-text {
+    color: #00e5ff;
+}
+
+.perf-btn-container {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 6px 6px;
+    margin: 0 4px;
+    border-radius: 8px;
+}
+
+.perf-btn-container:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+}
+
+.dnd-title {
+    font-size: 13px;
+    color: #ffffff;
+    font-weight: bold;
+}
+
+.clear-btn {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    color: #888888;
+    padding: 4px 8px;
+    border-radius: 8px;
+}
+
+.clear-btn:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+}
+
+.clear-btn-icon {
+    font-size: 12px;
+    margin-right: 6px;
+}
+
+.clear-btn-label {
+    font-size: 12px;
+    font-weight: bold;
+}
+
+switch {
+    background-color: #333333;
+    border-radius: 12px;
+    border: none;
+    min-width: 40px;
+    min-height: 24px;
+}
+
+switch:checked {
+    background-color: #00e5ff;
+}
+
+switch slider {
+    background-color: #888888;
+    border-radius: 50%;
+    min-width: 18px;
+    min-height: 18px;
+    margin: 3px;
+    box-shadow: none;
+}
+
+switch:checked slider {
+    background-color: #ffffff;
+}
+
+.slider-panel-icon {
+    color: #b0b0b0;
+    margin-right: 8px;
+}
+
+.slider-panel-title {
+    font-size: 13px;
+    font-weight: bold;
+    color: #ffffff;
+}
+
+.slider-value {
+    font-size: 13px;
+    font-weight: bold;
+    color: #ffffff;
+    margin-left: 12px;
+}
+
+scale {
+    padding: 0;
+    margin: 8px 0;
+}
+
+scale trough {
+    background-color: #333333;
+    min-height: 12px;
+    border-radius: 6px;
+}
+
+scale highlight {
+    background-color: #333333;
+    border-radius: 6px;
+}
+
+scale.cyan-scale highlight {
+    background-color: #00e5ff;
+}
+
+scale slider {
+    background-color: #ffffff;
+    min-width: 18px;
+    min-height: 18px;
+    border-radius: 50%;
+    box-shadow: none;
+    margin: -3px;
+}
+
+.notification-icon {
+    color: #3a3a3a;
+}
+
+.notification-label {
+    color: #3a3a3a;
+    font-size: 15px;
+    font-weight: bold;
+    margin-top: 12px;
+}
+
+separator {
+    background-color: #222222;
+    min-height: 1px;
+    margin: 12px 0;
+}
+
+#app-menu-box {
+    background-color: rgba(0, 0, 0, 0.947);
+    border: 1px solid #222222;
+    border-radius: 12px;
+    padding: 8px 0;
+}
+
+.app-menu-item {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    color: #dddddd;
+    font-size: 13px;
+    padding: 6px 14px;
+    border-radius: 8px;
+    margin: 0 8px;
+    outline: none;
+    text-shadow: none;
+}
+
+.app-menu-item:hover {
+    background-color: rgba(255, 255, 255, 0.05);
+    color: #ffffff;
+}
+
+.app-menu-shortcut {
+    color: #999999;
+    font-size: 12px;
+    margin-left: 24px;
+}
+
+.app-menu-item:hover .app-menu-shortcut {
+    color: #ffffff;
+}
+
+.app-menu-separator {
+    background-color: #222222;
+    min-height: 1px;
+    margin: 4px 10px;
+}
+
+.album-art {
+    border-radius: 26px;
+}
+
+/* ── Workspace dot indicators (Cairo based) ─────────────────────────────── */
+
+.workspace-dot-event-box {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    /* Extra padding to increase the clickable hit area */
+    padding: 6px; 
+}
+
+/* ── Volume Indicator (panel button) ──────────────────────────────────────── */
+
+#volume-indicator-btn, #mic-indicator-btn {
+    background-color: transparent;
+    border: none;
+    box-shadow: none;
+    padding: 4px 6px;
+    border-radius: 8px;
+    color: #cccccc;
+    min-width: 24px;
+    min-height: 24px;
+}
+
+#volume-indicator-btn:hover, #mic-indicator-btn:hover {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}
+
+/* ── Volume Mixer popup ────────────────────────────────────────────────────── */
+
+#volume-mixer-window, #mic-mixer-window {
+    background-color: transparent;
+}
+
+#mixer-outer, #mic-mixer-outer {
+    background-color: rgba(12, 12, 14, 0.92);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 14px;
+    padding: 0;
+    min-width: 320px;
+}
+
+#mixer-header, #mic-mixer-header {
+    padding: 12px 16px 10px 16px;
+}
+
+#mixer-title, #mic-mixer-title {
+    font-size: 13px;
+    font-weight: 700;
+    color: #ffffff;
+    letter-spacing: 0.4px;
+}
+
+#mixer-sep, #mic-mixer-sep {
+    background-color: rgba(255, 255, 255, 0.08);
+    min-height: 1px;
+    margin: 0;
+}
+
+#mixer-list, #mic-mixer-list {
+    padding: 4px 0;
+}
+
+#mixer-row, #mic-mixer-row {
+    padding: 4px 0;
+    border-radius: 8px;
+}
+
+#mixer-row:hover, #mic-mixer-row:hover {
+    background-color: rgba(255, 255, 255, 0.04);
+}
+
+#mixer-app-icon, #mic-mixer-app-icon {
+    color: #888888;
+    margin-right: 2px;
+}
+
+#mixer-app-name, #mic-mixer-app-name {
+    font-size: 12px;
+    color: #cccccc;
+}
+
+#mixer-vol-value, #mic-mixer-vol-value {
+    font-size: 11px;
+    font-weight: bold;
+    color: #888888;
+    min-width: 34px;
+}
+
+#mixer-empty-label, #mic-mixer-empty-label {
+    font-size: 12px;
+    color: #555555;
+    padding: 16px;
+}
+
+#mixer-slider scale, #mic-mixer-slider scale {
+    padding: 0;
+}
+
+#mixer-slider scale trough, #mic-mixer-slider scale trough {
+    background-color: #2a2a2a;
+    min-height: 6px;
+    border-radius: 3px;
+}
+
+#mixer-slider scale highlight, #mic-mixer-slider scale highlight {
+    background-color: #00e5ff;
+    border-radius: 3px;
+}
+
+#mixer-slider scale slider, #mic-mixer-slider scale slider {
+    background-color: #ffffff;
+    min-width: 14px;
+    min-height: 14px;
+    border-radius: 50%;
+    box-shadow: none;
+    margin: -4px;
+}
+
+/* ── Wi-Fi Menu ────────────────────────────────────────────────────────────── */
+.wifi-menu {
+    background-color: rgba(12, 12, 14, 0.95);
+    border: 1px solid rgba(255, 255, 255, 0.10);
+    border-radius: 12px;
+    padding: 0;
+}
+
+.wifi-menu list {
+    background-color: transparent;
+}
+
+.wifi-menu row {
+    padding: 4px;
+    border-radius: 8px;
+    color: #cccccc;
+    margin: 2px 4px;
+    outline: none;
+    border: none;
+}
+
+.wifi-menu row:hover,
+.wifi-menu row:selected {
+    background-color: rgba(255, 255, 255, 0.08);
+    color: #ffffff;
+}

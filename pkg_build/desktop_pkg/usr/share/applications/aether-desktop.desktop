@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=Vaxp Desktop
+Comment=Desktop background, icons, and widgets for Wayland
+Exec=desktop
+Type=Application
+Categories=Utility;DesktopSettings;
+StartupNotify=false
+NoDisplay=true

@@ -1,0 +1,7 @@
+Package: aether-AetherDock
+Version: 0.1.0
+Section: utils
+Priority: optional
+Architecture: amd64
+Maintainer: Aether Developer <dev@aether.org>
+Description: AetherShell component - AetherDock

@@ -1,0 +1,13 @@
+[Unit]
+Description=Vaxpwy OSD and Notifications Daemon
+After=venom-core.service
+
+[Service]
+ExecStart=/usr/local/bin/osd-notify
+Restart=on-failure
+RestartSec=2
+Environment="XDG_RUNTIME_DIR=%t"
+PassEnvironment=WAYLAND_DISPLAY WAYFIRE_SOCKET Aether_SOCKET DBUS_SESSION_BUS_ADDRESS
+
+[Install]
+WantedBy=default.target

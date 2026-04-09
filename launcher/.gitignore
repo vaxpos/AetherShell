@@ -1,0 +1,8 @@
+build/
+.cache/
+*.o
+*.a
+*.so
+compile_commands.json
+.vscode/
+tags
