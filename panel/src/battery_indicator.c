@@ -162,6 +162,7 @@ static void on_proxy_ready(GObject *source_object, GAsyncResult *res, gpointer u
 
 GtkWidget* get_battery_widget(void) {
     GtkWidget *box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
+    gtk_widget_set_margin_start(box, 8);
 
     // Custom drawing area for the battery
     battery_drawing_area = gtk_drawing_area_new();
