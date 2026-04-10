@@ -787,8 +787,8 @@ static const char *SIDEBAR_CSS =
     /* ══ GAUGES ROW ══ */
     "#gauge_row {"
     "  border-top: 1px solid rgba(255,255,255,0.06);"
-    "margin-top: 10;"
-    "margin-bottom: 10;"
+    "  margin-top: 10px;"
+    "  margin-bottom: 10px;"
     "}"
     "#gauge_cell {"
     "  padding: 12px 8px;"

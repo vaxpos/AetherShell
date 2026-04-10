@@ -257,6 +257,7 @@ int main(int argc, char *argv[]) {
     g_timeout_add_seconds(1, update_time, NULL);
     
     GtkWidget *time_btn = gtk_button_new();
+    gtk_widget_set_name(time_btn, "time-button");
     gtk_button_set_relief(GTK_BUTTON(time_btn), GTK_RELIEF_NONE);
     gtk_container_add(GTK_CONTAINER(time_btn), time_label);
     sidebar_popup_set_relative_to(sidebar_w, time_btn);
