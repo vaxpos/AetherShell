@@ -16,7 +16,7 @@ typedef struct {
     double energy_full;
     double energy_full_design;
     double capacity;
-    gint64 update_time;
+    guint64 update_time;
 } BatteryInfo;
 
 static GtkWidget *battery_button;
@@ -51,7 +51,7 @@ static void format_energy(double energy_wh, char *out, size_t len) {
     }
 }
 
-static void format_timestamp(gint64 timestamp, char *out, size_t len) {
+static void format_timestamp(guint64 timestamp, char *out, size_t len) {
     if (timestamp <= 0) {
         g_snprintf(out, len, "Unavailable");
         return;
@@ -97,17 +97,13 @@ static void update_battery_details_ui(void) {
     if (health_value > 0.0) {
         g_snprintf(health_text, sizeof(health_text), "%.0f%%", health_value);
     } else {
-        g_snprintf(health_text, sizeof(health_text), "Unavailable");
+        g_snprintf(health_text, sizeof(health_text), "Unsupported by UPower");
     }
     if (health_value_label) {
         gtk_label_set_text(GTK_LABEL(health_value_label), health_text);
     }
 
-    if (battery_info.state == 1 || battery_info.state == 4 || battery_info.state == 5) {
-        format_timestamp(battery_info.update_time, last_charge_text, sizeof(last_charge_text));
-    } else {
-        g_snprintf(last_charge_text, sizeof(last_charge_text), "Unavailable");
-    }
+    format_timestamp(battery_info.update_time, last_charge_text, sizeof(last_charge_text));
     if (last_charge_value_label) {
         gtk_label_set_text(GTK_LABEL(last_charge_value_label), last_charge_text);
     }
@@ -220,9 +216,9 @@ static void update_battery_ui(GVariant *properties) {
         g_variant_unref(value);
     }
 
-    value = g_variant_lookup_value(properties, "UpdateTime", G_VARIANT_TYPE_INT64);
+    value = g_variant_lookup_value(properties, "UpdateTime", G_VARIANT_TYPE_UINT64);
     if (value) {
-        battery_info.update_time = g_variant_get_int64(value);
+        battery_info.update_time = g_variant_get_uint64(value);
         g_variant_unref(value);
     }
 
