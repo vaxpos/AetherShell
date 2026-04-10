@@ -293,28 +293,49 @@ int main(int argc, char *argv[]) {
     GtkWidget *sni_tray = create_sni_tray_widget();
     gtk_box_pack_start(GTK_BOX(right_box), sni_tray, FALSE, FALSE, 0);
 
-    // Wifi indicator
-    GtkWidget *wifi_widget = create_wifi_indicator_widget();
-    gtk_box_pack_start(GTK_BOX(right_box), wifi_widget, FALSE, FALSE, 0);
-
-    // Mic indicator
-    GtkWidget *mic_widget = create_mic_indicator_widget();
-    gtk_box_pack_start(GTK_BOX(right_box), mic_widget, FALSE, FALSE, 0);
-
-    // Volume indicator
-    GtkWidget *volume_widget = create_volume_indicator_widget();
-    gtk_box_pack_start(GTK_BOX(right_box), volume_widget, FALSE, FALSE, 0);
-
     // Keyboard layout indicator
     GtkWidget *keyboard_layout_widget = create_keyboard_layout_widget();
     gtk_box_pack_start(GTK_BOX(right_box), keyboard_layout_widget, FALSE, FALSE, 0);
 
+    // Status box to group wifi, mic, and volume
+    GtkWidget *status_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_name(status_box, "status-box");
+
+    // Wifi indicator
+    GtkWidget *wifi_widget = create_wifi_indicator_widget();
+    gtk_box_pack_start(GTK_BOX(status_box), wifi_widget, FALSE, FALSE, 0);
+
+    // Mic indicator
+    GtkWidget *mic_widget = create_mic_indicator_widget();
+    gtk_box_pack_start(GTK_BOX(status_box), mic_widget, FALSE, FALSE, 0);
+
+    // Volume indicator
+    GtkWidget *volume_widget = create_volume_indicator_widget();
+    gtk_box_pack_start(GTK_BOX(status_box), volume_widget, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(right_box), status_box, FALSE, FALSE, 0);
+
+
+    // Sys box to group battery, search, and cc_btn
+    GtkWidget *sys_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_name(sys_box, "sys-box");
+
     // Battery widget
     GtkWidget *battery_widget = get_battery_widget();
-    gtk_box_pack_start(GTK_BOX(right_box), battery_widget, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(sys_box), battery_widget, FALSE, FALSE, 0);
 
     g_signal_connect(cc_btn, "clicked", G_CALLBACK(on_panel_cc_toggle_clicked), cc_window);
-    gtk_box_pack_start(GTK_BOX(right_box), cc_btn, FALSE, FALSE, 0);
+    
+    // Search button (UI only)
+    GtkWidget *search_btn = gtk_button_new();
+    gtk_button_set_relief(GTK_BUTTON(search_btn), GTK_RELIEF_NONE);
+    GtkWidget *search_icon = gtk_image_new_from_icon_name("system-search-symbolic", GTK_ICON_SIZE_MENU);
+    gtk_container_add(GTK_CONTAINER(search_btn), search_icon);
+    gtk_box_pack_start(GTK_BOX(sys_box), search_btn, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(sys_box), cc_btn, FALSE, FALSE, 0);
+    
+    gtk_box_pack_start(GTK_BOX(right_box), sys_box, FALSE, FALSE, 0);
     gtk_box_pack_end(GTK_BOX(hbox), right_box, FALSE, FALSE, 0);
     
     g_signal_connect(window, "destroy", G_CALLBACK(on_panel_window_destroy), NULL);

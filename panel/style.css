@@ -456,7 +456,7 @@ separator {
     color: #ffffff;
 }
 
-#time-button {
+#time-button, #sys-box, #status-box {
     background-color: rgba(0, 0, 0, 0.3);
     border-radius: 12px;
     margin-top: 4px;
