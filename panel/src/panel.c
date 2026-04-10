@@ -161,6 +161,28 @@ static void on_panel_sidebar_toggle_clicked(GtkButton *btn, gpointer user_data) 
     sidebar_popup_toggle(popup, GTK_WIDGET(btn));
 }
 
+static void on_panel_search_clicked(GtkButton *btn, gpointer user_data) {
+    GError *error = NULL;
+    gchar *argv[] = {
+        "gdbus",
+        "call",
+        "--session",
+        "--dest", "org.venom.Basilisk",
+        "--object-path", "/org/venom/Basilisk",
+        "--method", "org.venom.Basilisk.Toggle",
+        NULL
+    };
+
+    (void)btn;
+    (void)user_data;
+
+    if (!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, &error)) {
+        g_warning("[Panel] Failed to toggle Basilisk search: %s",
+                  error ? error->message : "unknown error");
+        if (error) g_error_free(error);
+    }
+}
+
 static void on_panel_screen_changed(GdkScreen *screen, gpointer user_data) {
     GtkWidget *window = GTK_WIDGET(user_data);
     (void)screen;
@@ -340,6 +362,7 @@ int main(int argc, char *argv[]) {
     gtk_button_set_relief(GTK_BUTTON(search_btn), GTK_RELIEF_NONE);
     GtkWidget *search_icon = gtk_image_new_from_icon_name("system-search-symbolic", GTK_ICON_SIZE_MENU);
     gtk_container_add(GTK_CONTAINER(search_btn), search_icon);
+    g_signal_connect(search_btn, "clicked", G_CALLBACK(on_panel_search_clicked), NULL);
     gtk_box_pack_start(GTK_BOX(sys_box), search_btn, FALSE, FALSE, 0);
 
     // Notifications bell button
