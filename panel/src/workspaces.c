@@ -155,7 +155,7 @@ static gboolean on_dot_draw(GtkWidget *widget, cairo_t *cr, gpointer user_data) 
 
     if (dot->is_active) {
         /* purple pill */
-        cairo_set_source_rgba(cr, 0.486, 0.227, 0.929, 1.0);   /* #7c3aed */
+        cairo_set_source_rgba(cr, 0.486, 0.227, 0.929, 1.0);   /* #00fcd2 */
         cairo_pill(cr, 0, 0, w, h);
         cairo_fill(cr);
     } else {
