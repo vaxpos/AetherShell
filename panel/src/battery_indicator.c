@@ -100,9 +100,6 @@ static void update_battery_ui(GVariant *properties) {
         if (p != current_percentage) {
             current_percentage = p;
             changed = TRUE;
-            char buf[32];
-            snprintf(buf, sizeof(buf), "%d%%", (int)p);
-            gtk_label_set_text(GTK_LABEL(battery_label), buf);
         }
         g_variant_unref(v_percent);
     }
@@ -171,15 +168,10 @@ GtkWidget* get_battery_widget(void) {
     gtk_widget_set_size_request(battery_drawing_area, 30, 16);
     g_signal_connect(G_OBJECT(battery_drawing_area), "draw", G_CALLBACK(on_draw_battery), NULL);
 
-    battery_label = gtk_label_new("-%");
-    gtk_style_context_add_class(gtk_widget_get_style_context(battery_label), "battery-label");
-
     // Fix baseline alignment for perfection
     gtk_widget_set_valign(battery_drawing_area, GTK_ALIGN_CENTER);
-    gtk_widget_set_valign(battery_label, GTK_ALIGN_CENTER);
 
     gtk_box_pack_start(GTK_BOX(box), battery_drawing_area, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box), battery_label, FALSE, FALSE, 0);
     
     // Connect to UPower asynchronously
     g_dbus_proxy_new_for_bus(G_BUS_TYPE_SYSTEM,
