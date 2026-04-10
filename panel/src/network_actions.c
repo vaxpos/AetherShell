@@ -503,6 +503,48 @@ static gpointer active_wifi_user_data = NULL;
 static GDBusConnection *active_wifi_bus = NULL;
 static gchar *active_wifi_dev_path = NULL;
 
+static gboolean get_active_ethernet_info(WifiActiveInfo *info)
+{
+    gchar *std_out = NULL;
+    GError *error = NULL;
+
+    if (!info) return FALSE;
+
+    if (!g_spawn_command_line_sync("nmcli -t -f DEVICE,TYPE,STATE,CONNECTION dev status",
+                                   &std_out, NULL, NULL, &error)) {
+        g_clear_error(&error);
+        return FALSE;
+    }
+
+    if (std_out) {
+        gchar **lines = g_strsplit(std_out, "\n", -1);
+        for (int i = 0; lines[i]; i++) {
+            gchar **parts;
+
+            if (lines[i][0] == '\0') continue;
+
+            parts = g_strsplit(lines[i], ":", 4);
+            if (parts[0] && parts[1] && parts[2] &&
+                g_strcmp0(parts[1], "ethernet") == 0 &&
+                g_strcmp0(parts[2], "connected") == 0) {
+                info->is_ethernet = TRUE;
+                info->ssid = g_strdup((parts[3] && parts[3][0] != '\0') ? parts[3] : "Ethernet Connected");
+                info->device = g_strdup(parts[0]);
+                info->connection_name = g_strdup((parts[3] && parts[3][0] != '\0') ? parts[3] : "Wired");
+                g_strfreev(parts);
+                g_strfreev(lines);
+                g_free(std_out);
+                return TRUE;
+            }
+            g_strfreev(parts);
+        }
+        g_strfreev(lines);
+    }
+
+    g_free(std_out);
+    return FALSE;
+}
+
 static gboolean poll_active_wifi(gpointer user_data)
 {
     (void)user_data;
@@ -511,7 +553,15 @@ static gboolean poll_active_wifi(gpointer user_data)
     GVariant *active_ap_v = get_dbus_property(active_wifi_bus, NM_DBUS_SERVICE, active_wifi_dev_path, NM_DEV_WIRELESS_IFACE, "ActiveAccessPoint");
     
     if (!active_ap_v) {
-        if (active_wifi_cb) active_wifi_cb(NULL, active_wifi_user_data);
+        WifiActiveInfo eth_info = {0};
+        if (get_active_ethernet_info(&eth_info)) {
+            if (active_wifi_cb) active_wifi_cb(&eth_info, active_wifi_user_data);
+            g_free(eth_info.ssid);
+            g_free(eth_info.device);
+            g_free(eth_info.connection_name);
+        } else if (active_wifi_cb) {
+            active_wifi_cb(NULL, active_wifi_user_data);
+        }
         return G_SOURCE_CONTINUE;
     }
 
@@ -519,7 +569,15 @@ static gboolean poll_active_wifi(gpointer user_data)
     g_variant_unref(active_ap_v);
 
     if (g_strcmp0(ap_path, "/") == 0) {
-        if (active_wifi_cb) active_wifi_cb(NULL, active_wifi_user_data);
+        WifiActiveInfo eth_info = {0};
+        if (get_active_ethernet_info(&eth_info)) {
+            if (active_wifi_cb) active_wifi_cb(&eth_info, active_wifi_user_data);
+            g_free(eth_info.ssid);
+            g_free(eth_info.device);
+            g_free(eth_info.connection_name);
+        } else if (active_wifi_cb) {
+            active_wifi_cb(NULL, active_wifi_user_data);
+        }
         g_free(ap_path);
         return G_SOURCE_CONTINUE;
     }
@@ -533,6 +591,9 @@ static gboolean poll_active_wifi(gpointer user_data)
     info.strength = 0;
     info.frequency = 0;
     info.is_5ghz = FALSE;
+    info.is_ethernet = FALSE;
+    info.device = NULL;
+    info.connection_name = NULL;
 
     if (ssid_v) {
         gsize len = 0;
@@ -555,6 +616,8 @@ static gboolean poll_active_wifi(gpointer user_data)
     if (active_wifi_cb) active_wifi_cb(&info, active_wifi_user_data);
 
     g_free(info.ssid);
+    g_free(info.device);
+    g_free(info.connection_name);
     g_free(ap_path);
     return G_SOURCE_CONTINUE;
 }

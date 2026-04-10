@@ -46,6 +46,9 @@ typedef struct {
     guchar   strength;
     guint32  frequency;
     gboolean is_5ghz;
+    gboolean is_ethernet;
+    gchar   *device;
+    gchar   *connection_name;
 } WifiActiveInfo;
 
 typedef void (*WifiActiveInfoCallback)(WifiActiveInfo *info, gpointer user_data);

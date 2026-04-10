@@ -34,6 +34,24 @@ static void on_wifi_active_changed(WifiActiveInfo *info, gpointer user_data)
         if (lbl_ssid) gtk_label_set_text(GTK_LABEL(lbl_ssid), "Not Connected");
         if (lbl_strength) gtk_label_set_text(GTK_LABEL(lbl_strength), "Strength: 0%");
         if (lbl_freq) gtk_label_set_text(GTK_LABEL(lbl_freq), "Band: Unknown");
+    } else if (info->is_ethernet) {
+        gtk_image_set_from_icon_name(GTK_IMAGE(wi_icon), "network-wired-symbolic", GTK_ICON_SIZE_MENU);
+
+        if (lbl_ssid) gtk_label_set_text(GTK_LABEL(lbl_ssid), info->ssid);
+
+        if (lbl_strength) {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "Interface: %s",
+                     (info->device && info->device[0] != '\0') ? info->device : "Unknown");
+            gtk_label_set_text(GTK_LABEL(lbl_strength), buf);
+        }
+
+        if (lbl_freq) {
+            char buf[128];
+            snprintf(buf, sizeof(buf), "Status: %s",
+                     (info->connection_name && info->connection_name[0] != '\0') ? info->connection_name : "Connected");
+            gtk_label_set_text(GTK_LABEL(lbl_freq), buf);
+        }
     } else {
         gtk_image_set_from_icon_name(GTK_IMAGE(wi_icon), wifi_icon_name(info->strength), GTK_ICON_SIZE_MENU);
         
