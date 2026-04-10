@@ -779,7 +779,7 @@ static gboolean on_window_draw(GtkWidget *widget, cairo_t *cr, gpointer data) {
     cairo_close_path(cr);
     
     /* Paint it with a solid, but since it's RGBA visual it will allow the CSS background through */
-    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0); 
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
     cairo_fill(cr);
 
     return FALSE; /* Let GTK draw the CSS over our cairo mask */
@@ -1094,7 +1094,7 @@ static void on_window_size_allocate(GtkWidget *widget, GtkAllocation *allocation
     
     /* Draw rounded rectangle mask */
     cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.0);
+    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.3);
     cairo_paint(cr);
     
     cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 1.0);
