@@ -605,6 +605,7 @@ static void on_properties_changed(GDBusConnection *conn,
             if (cv) g_variant_unref(cv);
             if (pv) g_variant_unref(pv);
             if (rv) g_variant_unref(rv);
+            if (state_cb) state_cb(bt_powered, state_cb_data);
             notify_scan_cb();
         }
     }
