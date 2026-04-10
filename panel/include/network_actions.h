@@ -24,36 +24,41 @@ typedef struct {
  * The caller owns the GList and must call network_wifi_networks_free(). */
 typedef void (*WifiScanCallback)(GList *networks, gpointer user_data);
 
-/* Trigger an async NM WiFi scan; cb is called when results are ready. */
+/* Trigger an async NM WiFi scan; cb is called twice:
+ *   - immediately with the last cached AP list
+ *   - ~2 s later with the freshly scanned list */
 void network_wifi_scan(WifiScanCallback cb, gpointer user_data);
 
 typedef void (*WifiConnectCallback)(gboolean success, gpointer user_data);
 
-/* Connect to a network.
- *   - If password is NULL and the network is open (or already saved), no
- *     credentials dialog is raised.
- *   - Pass password=NULL for saved networks. */
+/* Connect to a WiFi network via D-Bus (AddAndActivateConnection /
+ * ActivateConnection).  cb is called with success=TRUE once NM reports
+ * NM_ACTIVE_CONNECTION_STATE_ACTIVATED, or FALSE on failure/timeout.
+ *   - password may be NULL for open or already-saved networks.
+ *   - bssid  may be NULL; NM will pick the best AP automatically. */
 void network_wifi_connect(const gchar *ssid, const gchar *bssid,
-                          const gchar *password, WifiConnectCallback cb, gpointer user_data);
+                          const gchar *password,
+                          WifiConnectCallback cb, gpointer user_data);
 
 /* Free a list returned via WifiScanCallback */
 void network_wifi_networks_free(GList *list);
 
-/* ── Active WiFi Poller ──────────────────────────────────────────────────── */
+/* ── Active WiFi / Ethernet Poller ──────────────────────────────────────── */
 
 typedef struct {
-    gchar   *ssid;
-    guchar   strength;
-    guint32  frequency;
-    gboolean is_5ghz;
-    gboolean is_ethernet;
-    gchar   *device;
-    gchar   *connection_name;
+    gchar   *ssid;            /* SSID (WiFi) or connection name (Ethernet) */
+    guchar   strength;        /* 0-100 (WiFi only; 0 for Ethernet)         */
+    guint32  frequency;       /* MHz  (WiFi only; 0 for Ethernet)          */
+    gboolean is_5ghz;         /* TRUE if frequency >= 4000 MHz             */
+    gboolean is_ethernet;     /* TRUE when the active link is wired        */
+    gchar   *device;          /* kernel interface name (e.g. "eth0")       */
+    gchar   *connection_name; /* NM connection id                          */
 } WifiActiveInfo;
 
 typedef void (*WifiActiveInfoCallback)(WifiActiveInfo *info, gpointer user_data);
 
-/* Watch the active WiFi connection and notify changes via cb */
+/* Register a callback that is polled every 3 s for the active connection.
+ * info is NULL when there is no active WiFi or Ethernet connection. */
 void network_watch_active_wifi(WifiActiveInfoCallback cb, gpointer user_data);
 
-#endif // NETWORK_ACTIONS_H
+#endif /* NETWORK_ACTIONS_H */

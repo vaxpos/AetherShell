@@ -12,6 +12,7 @@
 #include "volume_indicator.h"
 #include "mic_indicator.h"
 #include "wifi_indicator.h"
+#include "bt_indicator.h"
 #include "sidebar_popup.h"
 #include "notifications_ui.h"
 
@@ -308,6 +309,10 @@ int main(int argc, char *argv[]) {
     // Wifi indicator
     GtkWidget *wifi_widget = create_wifi_indicator_widget();
     gtk_box_pack_start(GTK_BOX(status_box), wifi_widget, FALSE, FALSE, 0);
+
+    // Bluetooth indicator
+    GtkWidget *bt_widget = create_bt_indicator_widget();
+    gtk_box_pack_start(GTK_BOX(status_box), bt_widget, FALSE, FALSE, 0);
 
     // Mic indicator
     GtkWidget *mic_widget = create_mic_indicator_widget();

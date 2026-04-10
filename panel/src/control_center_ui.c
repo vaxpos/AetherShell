@@ -9,9 +9,172 @@
 #include "control_center_ui.h"
 #include "network_actions.h"
 #include "brightness_control.h"
+#include "bluetooth_manager.h"
 
 static GtkWidget *bt_wifi = NULL;
-static GtkWidget *bt_eth = NULL;
+static GtkWidget *bt_eth  = NULL;
+static GtkWidget *bt_blue = NULL;   /* bluetooth button in CC grid */
+
+/* ── Bluetooth popover (device list) ──────────────────────────────────────── */
+static GtkWidget *bt_popover  = NULL;
+static GtkWidget *bt_listbox  = NULL;
+
+static void on_bt_state_changed_cc(gboolean powered, gpointer user_data)
+{
+    (void)user_data;
+    if (!bt_blue) return;
+    GtkStyleContext *ctx = gtk_widget_get_style_context(bt_blue);
+    if (powered)
+        gtk_style_context_add_class(ctx, "active-cyan");
+    else
+        gtk_style_context_remove_class(ctx, "active-cyan");
+}
+
+static void on_bt_clicked(GtkButton *btn, gpointer user_data)
+{
+    (void)btn; (void)user_data;
+    bluetooth_toggle();
+}
+
+static void on_bt_scan_done(GList *devices, gpointer user_data)
+{
+    (void)user_data;
+    if (!bt_listbox) { bluetooth_devices_free(devices); return; }
+
+    /* Clear old entries */
+    GList *children = gtk_container_get_children(GTK_CONTAINER(bt_listbox));
+    for (GList *it = children; it; it = g_list_next(it))
+        gtk_widget_destroy(GTK_WIDGET(it->data));
+    g_list_free(children);
+
+    if (!devices) {
+        GtkWidget *lbl = gtk_label_new("No devices found");
+        gtk_widget_set_margin_top(lbl, 16);
+        gtk_widget_set_margin_bottom(lbl, 16);
+        gtk_container_add(GTK_CONTAINER(bt_listbox), lbl);
+    } else {
+        for (GList *l = devices; l; l = l->next) {
+            BtDevice *dev = l->data;
+
+            GtkWidget *row_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 8);
+            gtk_widget_set_margin_start(row_box, 8);
+            gtk_widget_set_margin_end(row_box, 8);
+            gtk_widget_set_margin_top(row_box, 6);
+            gtk_widget_set_margin_bottom(row_box, 6);
+
+            /* Device type icon */
+            const gchar *icon_name = "bluetooth-active-symbolic";
+            if (dev->icon) {
+                if (g_str_has_prefix(dev->icon, "audio"))      icon_name = "audio-headset-symbolic";
+                else if (g_strstr_len(dev->icon,-1,"phone"))   icon_name = "phone-symbolic";
+                else if (g_strstr_len(dev->icon,-1,"input"))   icon_name = "input-keyboard-symbolic";
+                else if (g_strstr_len(dev->icon,-1,"computer")) icon_name = "computer-symbolic";
+            }
+            GtkWidget *icon  = gtk_image_new_from_icon_name(icon_name, GTK_ICON_SIZE_MENU);
+            GtkWidget *label = gtk_label_new(dev->name ? dev->name : dev->address);
+            gtk_widget_set_halign(label, GTK_ALIGN_START);
+
+            gtk_box_pack_start(GTK_BOX(row_box), icon,  FALSE, FALSE, 0);
+            gtk_box_pack_start(GTK_BOX(row_box), label, TRUE,  TRUE,  0);
+
+            /* Status indicator */
+            if (dev->connected) {
+                GtkWidget *ok = gtk_image_new_from_icon_name("emblem-ok-symbolic", GTK_ICON_SIZE_MENU);
+                gtk_box_pack_end(GTK_BOX(row_box), ok, FALSE, FALSE, 0);
+            } else if (dev->paired) {
+                GtkWidget *lk = gtk_image_new_from_icon_name("emblem-synchronized-symbolic", GTK_ICON_SIZE_MENU);
+                gtk_box_pack_end(GTK_BOX(row_box), lk, FALSE, FALSE, 0);
+            }
+
+            /* RSSI label */
+            if (dev->rssi != 0) {
+                char rssi_buf[16];
+                snprintf(rssi_buf, sizeof(rssi_buf), "%d dBm", dev->rssi);
+                GtkWidget *rssi_lbl = gtk_label_new(rssi_buf);
+                gtk_style_context_add_class(gtk_widget_get_style_context(rssi_lbl), "slider-value");
+                gtk_box_pack_end(GTK_BOX(row_box), rssi_lbl, FALSE, FALSE, 0);
+            }
+
+            /* Store device path for connect action */
+            g_object_set_data_full(G_OBJECT(row_box), "bt-path",
+                                   g_strdup(dev->object_path), g_free);
+            g_object_set_data(G_OBJECT(row_box), "bt-connected",
+                              GINT_TO_POINTER(dev->connected));
+
+            gtk_container_add(GTK_CONTAINER(bt_listbox), row_box);
+        }
+    }
+    gtk_widget_show_all(bt_listbox);
+    bluetooth_devices_free(devices);
+}
+
+static void on_bt_row_activated(GtkListBox *box, GtkListBoxRow *row, gpointer user_data)
+{
+    (void)box; (void)user_data;
+    if (!row) return;
+    GtkWidget *child = gtk_bin_get_child(GTK_BIN(row));
+    if (!child) return;
+
+    const gchar *path      = g_object_get_data(G_OBJECT(child), "bt-path");
+    gboolean     connected = GPOINTER_TO_INT(g_object_get_data(G_OBJECT(child), "bt-connected"));
+    
+    g_print("BT list row clicked! path=%s\n", path ? path : "NULL");
+
+    if (!path) return;
+
+    if (bt_popover) gtk_popover_popdown(GTK_POPOVER(bt_popover));
+
+    if (connected) {
+        g_print("Device is connected, disconnecting...\n");
+        bluetooth_disconnect(path);
+    } else {
+        g_print("Device is not connected, initiating connect protocol...\n");
+        bluetooth_connect(path, NULL, NULL);
+    }
+}
+
+static gboolean on_bt_button_press(GtkWidget *widget, GdkEventButton *event, gpointer user_data)
+{
+    (void)user_data;
+    if (event->type == GDK_BUTTON_PRESS && event->button == 3) {
+        if (!bluetooth_is_powered()) return TRUE;
+
+        if (!bt_popover) {
+            bt_popover = gtk_popover_new(widget);
+            gtk_popover_set_position(GTK_POPOVER(bt_popover), GTK_POS_BOTTOM);
+
+            GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
+            gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll),
+                                           GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
+            gtk_widget_set_size_request(scroll, 240, 260);
+
+            bt_listbox = gtk_list_box_new();
+            g_signal_connect(bt_listbox, "row-activated",
+                             G_CALLBACK(on_bt_row_activated), NULL);
+            gtk_container_add(GTK_CONTAINER(scroll), bt_listbox);
+            gtk_container_add(GTK_CONTAINER(bt_popover), scroll);
+            gtk_style_context_add_class(
+                gtk_widget_get_style_context(bt_popover), "wifi-menu");
+        }
+
+        /* Show "Scanning…" placeholder */
+        GList *ch = gtk_container_get_children(GTK_CONTAINER(bt_listbox));
+        for (GList *it = ch; it; it = g_list_next(it))
+            gtk_widget_destroy(GTK_WIDGET(it->data));
+        g_list_free(ch);
+        GtkWidget *lbl = gtk_label_new("Scanning…");
+        gtk_widget_set_margin_top(lbl, 16);
+        gtk_widget_set_margin_bottom(lbl, 16);
+        gtk_container_add(GTK_CONTAINER(bt_listbox), lbl);
+
+        gtk_widget_show_all(bt_popover);
+        gtk_popover_popup(GTK_POPOVER(bt_popover));
+
+        bluetooth_scan(on_bt_scan_done, NULL);
+        return TRUE;
+    }
+    return FALSE;
+}
 
 static void on_wifi_state_changed(gboolean enabled) {
     if (!bt_wifi) return;
@@ -581,12 +744,16 @@ static GtkWidget* create_controls_page() {
     GtkWidget *tl_btn4 = create_icon_button("view-more-symbolic", NULL);
 
     bt_wifi = tl_btn1;
-    bt_eth = tl_btn3;
+    bt_eth  = tl_btn3;
+    bt_blue = tl_btn2;
 
     gtk_widget_add_events(tl_btn1, GDK_BUTTON_PRESS_MASK);
-    g_signal_connect(tl_btn1, "clicked", G_CALLBACK(on_wifi_clicked), NULL);
-    g_signal_connect(tl_btn1, "button-press-event", G_CALLBACK(on_wifi_button_press), NULL);
-    g_signal_connect(tl_btn3, "clicked", G_CALLBACK(on_eth_clicked), NULL);
+    gtk_widget_add_events(tl_btn2, GDK_BUTTON_PRESS_MASK);
+    g_signal_connect(tl_btn1, "clicked",             G_CALLBACK(on_wifi_clicked),      NULL);
+    g_signal_connect(tl_btn1, "button-press-event",  G_CALLBACK(on_wifi_button_press), NULL);
+    g_signal_connect(tl_btn2, "clicked",             G_CALLBACK(on_bt_clicked),        NULL);
+    g_signal_connect(tl_btn2, "button-press-event",  G_CALLBACK(on_bt_button_press),   NULL);
+    g_signal_connect(tl_btn3, "clicked",             G_CALLBACK(on_eth_clicked),       NULL);
 
     gtk_grid_attach(GTK_GRID(card_tl), tl_btn1, 0, 0, 1, 1);
     gtk_grid_attach(GTK_GRID(card_tl), tl_btn2, 1, 0, 1, 1);
@@ -937,6 +1104,7 @@ GtkWidget* init_control_center(void) {
     mpris_control_init(on_mpris_state_changed, NULL);
 
     network_init_state(on_wifi_state_changed, on_eth_state_changed);
+    bluetooth_init(on_bt_state_changed_cc, NULL);
     brightness_init(on_brightness_changed, NULL);
 
     return popover;
