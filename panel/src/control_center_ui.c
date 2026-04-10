@@ -32,7 +32,21 @@ static void on_bt_state_changed_cc(gboolean powered, gpointer user_data)
 
 static void on_bt_clicked(GtkButton *btn, gpointer user_data)
 {
-    (void)btn; (void)user_data;
+    GtkStyleContext *ctx;
+    gboolean next_powered;
+
+    (void)btn;
+    (void)user_data;
+
+    if (bt_blue) {
+        ctx = gtk_widget_get_style_context(bt_blue);
+        next_powered = !bluetooth_is_powered();
+        if (next_powered)
+            gtk_style_context_add_class(ctx, "active-cyan");
+        else
+            gtk_style_context_remove_class(ctx, "active-cyan");
+    }
+
     bluetooth_toggle();
 }
 
