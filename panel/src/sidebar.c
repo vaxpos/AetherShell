@@ -1145,14 +1145,9 @@ static gboolean get_monitor_geometry_for_widget(GtkWidget *widget, GdkRectangle 
 
 static void reposition_sidebar_popup(GtkWidget *popup, GtkWidget *relative_to) {
     GtkAllocation alloc;
-    GtkAllocation toplevel_alloc;
     GdkRectangle monitor = {0};
     GdkWindow *window;
-    GtkWidget *toplevel;
     gint origin_x = 0;
-    gint origin_y = 0;
-    gint top_origin_x = 0;
-    gint top_origin_y = 0;
     gint popup_x;
     gint popup_y;
 
@@ -1162,19 +1157,15 @@ static void reposition_sidebar_popup(GtkWidget *popup, GtkWidget *relative_to) {
 
     window = gtk_widget_get_window(relative_to);
     if (!window) return;
-    toplevel = gtk_widget_get_toplevel(relative_to);
-    if (!GTK_IS_WIDGET(toplevel) || !gtk_widget_get_realized(toplevel)) return;
 
     gtk_widget_get_allocation(relative_to, &alloc);
-    gtk_widget_get_allocation(toplevel, &toplevel_alloc);
-    gdk_window_get_origin(window, &origin_x, &origin_y);
-    gdk_window_get_origin(gtk_widget_get_window(toplevel), &top_origin_x, &top_origin_y);
+    gdk_window_get_origin(window, &origin_x, NULL);
 
     popup_x = origin_x + alloc.x + (alloc.width / 2) - (SIDEBAR_POPUP_WIDTH / 2);
     popup_x = CLAMP(popup_x,
                     monitor.x + SIDEBAR_POPUP_PAD,
                     monitor.x + monitor.width - SIDEBAR_POPUP_WIDTH - SIDEBAR_POPUP_PAD);
-    popup_y = top_origin_y + toplevel_alloc.height;
+    popup_y = monitor.y;
 
     gtk_layer_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
     gtk_layer_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
@@ -1201,7 +1192,7 @@ GtkWidget *init_sidebar_popup(void) {
     gtk_layer_set_keyboard_mode(GTK_WINDOW(popup), GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
     gtk_layer_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
     gtk_layer_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
-    gtk_layer_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, 36);
+    gtk_layer_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, 0);
     gtk_layer_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, 8);
     ensure_rgba_visual(popup);
     g_signal_connect(popup, "draw", G_CALLBACK(draw_sidebar_popup_clear), NULL);
