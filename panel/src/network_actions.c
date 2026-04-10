@@ -826,12 +826,17 @@ void network_wifi_connect(const gchar *ssid, const gchar *bssid,
     } else {
         /* ── Case B: new/open network or new password → AddAndActivateConnection ── */
         GVariantBuilder conn_builder;
+        gchar *uuid = g_uuid_string_random();
         g_variant_builder_init(&conn_builder, G_VARIANT_TYPE("a{sa{sv}}"));
 
         /* connection section */
         {
             GVariantBuilder s;
             g_variant_builder_init(&s, G_VARIANT_TYPE("a{sv}"));
+            g_variant_builder_add(&s, "{sv}", "id",
+                                  g_variant_new_string(ssid));
+            g_variant_builder_add(&s, "{sv}", "uuid",
+                                  g_variant_new_string(uuid));
             g_variant_builder_add(&s, "{sv}", "type",
                                   g_variant_new_string("802-11-wireless"));
             g_variant_builder_add(&conn_builder, "{sa{sv}}", "connection", &s);
@@ -845,8 +850,6 @@ void network_wifi_connect(const gchar *ssid, const gchar *bssid,
                                        (const guchar *)ssid, strlen(ssid), 1);
             g_variant_builder_add(&s, "{sv}", "ssid", ssid_bytes);
             g_variant_builder_add(&s, "{sv}", "mode", g_variant_new_string("infrastructure"));
-            if (bssid && *bssid)
-                g_variant_builder_add(&s, "{sv}", "bssid", g_variant_new_string(bssid));
             g_variant_builder_add(&conn_builder, "{sa{sv}}", "802-11-wireless", &s);
         }
 
@@ -898,6 +901,8 @@ void network_wifi_connect(const gchar *ssid, const gchar *bssid,
             if (cb) cb(FALSE, user_data);
             connect_ctx_free(ctx);
         }
+
+        g_free(uuid);
     }
 
     g_free(saved_conn);
