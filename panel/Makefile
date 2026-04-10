@@ -14,14 +14,14 @@ $(error Missing build dependencies. Install: libgtk-3-dev libgtk-layer-shell-dev
 endif
 CFLAGS  = -DVAXPWY_PANEL_RESOURCES_DIR=\"$(RESOURCES_DIR)\" \
           $(shell pkg-config --cflags $(PKGS))
-LIBS    = $(shell pkg-config --libs $(PKGS))
+LIBS    = $(shell pkg-config --libs $(PKGS)) -lm
 
 SRC      = src/panel.c src/control_center_ui.c src/app_menu.c \
            src/battery_indicator.c src/pulse_volume.c src/power_profile.c \
            src/mpris_control.c src/power_actions.c src/venom_notifications.c \
            src/workspaces.c src/keyboard_layout.c src/sni_tray.c src/resource_paths.c \
            src/network_actions.c src/brightness_control.c src/volume_indicator.c \
-           src/mic_indicator.c src/wifi_indicator.c
+           src/mic_indicator.c src/wifi_indicator.c src/sidebar.c
 INCLUDES = -Iinclude
 
 panel: $(SRC)

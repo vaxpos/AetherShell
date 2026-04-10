@@ -12,6 +12,7 @@
 #include "volume_indicator.h"
 #include "mic_indicator.h"
 #include "wifi_indicator.h"
+#include "sidebar_popup.h"
 
 static GtkWidget *time_label;
 static const gint PANEL_HEIGHT = 32;
@@ -153,6 +154,11 @@ static void on_panel_cc_toggle_clicked(GtkButton *btn, gpointer user_data) {
     }
 }
 
+static void on_panel_sidebar_toggle_clicked(GtkButton *btn, gpointer user_data) {
+    GtkWidget *popup = GTK_WIDGET(user_data);
+    sidebar_popup_toggle(popup, GTK_WIDGET(btn));
+}
+
 static void on_panel_screen_changed(GdkScreen *screen, gpointer user_data) {
     GtkWidget *window = GTK_WIDGET(user_data);
     (void)screen;
@@ -177,6 +183,9 @@ int main(int argc, char *argv[]) {
     
     // Initialize the background app menu window (starts hidden)
     GtkWidget *app_menu_w = init_app_menu();
+
+    // Initialize the background sidebar window (starts hidden)
+    GtkWidget *sidebar_w = init_sidebar_popup();
 
     // Create Panel Window
     GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -246,7 +255,14 @@ int main(int argc, char *argv[]) {
     time_label = gtk_label_new("");
     update_time(NULL);
     g_timeout_add_seconds(1, update_time, NULL);
-    gtk_box_pack_start(GTK_BOX(center_box), time_label, FALSE, FALSE, 0);
+    
+    GtkWidget *time_btn = gtk_button_new();
+    gtk_button_set_relief(GTK_BUTTON(time_btn), GTK_RELIEF_NONE);
+    gtk_container_add(GTK_CONTAINER(time_btn), time_label);
+    sidebar_popup_set_relative_to(sidebar_w, time_btn);
+    g_signal_connect(time_btn, "clicked", G_CALLBACK(on_panel_sidebar_toggle_clicked), sidebar_w);
+    
+    gtk_box_pack_start(GTK_BOX(center_box), time_btn, FALSE, FALSE, 0);
     
     gtk_box_set_center_widget(GTK_BOX(hbox), center_box);
 
