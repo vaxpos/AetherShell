@@ -13,6 +13,7 @@
 #include "mic_indicator.h"
 #include "wifi_indicator.h"
 #include "sidebar_popup.h"
+#include "notifications_ui.h"
 
 static GtkWidget *time_label;
 static const gint PANEL_HEIGHT = 32;
@@ -187,6 +188,9 @@ int main(int argc, char *argv[]) {
     // Initialize the background sidebar window (starts hidden)
     GtkWidget *sidebar_w = init_sidebar_popup();
 
+    // Initialize the notifications popup (starts hidden)
+    GtkWidget *notif_w = init_notifications_ui();
+
     // Create Panel Window
     GtkWidget *window = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     gtk_window_set_decorated(GTK_WINDOW(window), FALSE);
@@ -332,6 +336,14 @@ int main(int argc, char *argv[]) {
     GtkWidget *search_icon = gtk_image_new_from_icon_name("system-search-symbolic", GTK_ICON_SIZE_MENU);
     gtk_container_add(GTK_CONTAINER(search_btn), search_icon);
     gtk_box_pack_start(GTK_BOX(sys_box), search_btn, FALSE, FALSE, 0);
+
+    // Notifications bell button
+    GtkWidget *notif_btn = gtk_button_new();
+    gtk_button_set_relief(GTK_BUTTON(notif_btn), GTK_RELIEF_NONE);
+    GtkWidget *notif_icon = gtk_image_new_from_icon_name("preferences-system-notifications-symbolic", GTK_ICON_SIZE_MENU);
+    gtk_container_add(GTK_CONTAINER(notif_btn), notif_icon);
+    g_signal_connect(notif_btn, "clicked", G_CALLBACK(on_panel_cc_toggle_clicked), notif_w);
+    gtk_box_pack_start(GTK_BOX(sys_box), notif_btn, FALSE, FALSE, 0);
 
     gtk_box_pack_start(GTK_BOX(sys_box), cc_btn, FALSE, FALSE, 0);
     

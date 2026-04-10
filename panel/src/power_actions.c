@@ -32,7 +32,6 @@ void venom_logout(void) {
     system("dm-tool switch-to-greeter");
 }
 
-// السكون (Sleep)
 void venom_sleep(void) {
     GDBusConnection *bus = g_bus_get_sync(G_BUS_TYPE_SYSTEM, NULL, NULL);
     if (!bus) return;

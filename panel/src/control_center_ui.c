@@ -5,7 +5,6 @@
 #include "power_profile.h"
 #include "mpris_control.h"
 #include "power_actions.h"
-#include "venom_notifications.h"
 #include "resource_paths.h"
 #include "control_center_ui.h"
 #include "network_actions.h"
@@ -287,9 +286,7 @@ void control_center_set_relative_to(GtkWidget *control_center, GtkWidget *relati
     (void)relative_to;
 }
 
-GtkWidget *stack;
-GtkWidget *btn_controls;
-GtkWidget *btn_notifications;
+
 
 GtkWidget *scale_snd;
 GtkWidget *lbl_snd_val;
@@ -541,25 +538,7 @@ static void on_media_next_clicked(GtkButton *btn, gpointer user_data) {
 
 
 
-// Notifications Integration
-GtkWidget *sw_dnd;
-GtkWidget *notifications_box;
 
-static void on_dnd_state_changed(gboolean enabled, gpointer user_data) {
-    // Only update switch if it differs to avoid loops
-    if (gtk_switch_get_active(GTK_SWITCH(sw_dnd)) != enabled) {
-        gtk_switch_set_active(GTK_SWITCH(sw_dnd), enabled);
-    }
-}
-
-static gboolean on_dnd_switch_activated(GtkWidget *widget, gboolean state, gpointer user_data) {
-    venom_notifications_set_dnd(state);
-    return FALSE;
-}
-
-static void on_clear_history_clicked(GtkButton *btn, gpointer user_data) {
-    venom_notifications_clear_history();
-}
 
 static GtkWidget* create_icon_button(const char *icon_name, const char *extra_class) {
     GtkWidget *btn = gtk_button_new();
@@ -571,132 +550,6 @@ static GtkWidget* create_icon_button(const char *icon_name, const char *extra_cl
         gtk_style_context_add_class(ctx, extra_class);
     }
     return btn;
-}
-
-static void on_notifications_updated(GList *history, gpointer user_data) {
-    // Clear current children of notifications_box
-    GList *children, *iter;
-    children = gtk_container_get_children(GTK_CONTAINER(notifications_box));
-    for (iter = children; iter != NULL; iter = g_list_next(iter)) {
-        gtk_widget_destroy(GTK_WIDGET(iter->data));
-    }
-    g_list_free(children);
-
-    if (!history) {
-        // Show empty state
-        GtkWidget *icon = gtk_image_new_from_icon_name("notifications-disabled-symbolic", GTK_ICON_SIZE_DIALOG);
-        gtk_style_context_add_class(gtk_widget_get_style_context(icon), "notification-icon");
-        gtk_image_set_pixel_size(GTK_IMAGE(icon), 72);
-
-        GtkWidget *lbl = gtk_label_new("No Notifications");
-        gtk_style_context_add_class(gtk_widget_get_style_context(lbl), "notification-label");
-
-        // Center empty state
-        GtkWidget *empty_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 8);
-        gtk_widget_set_valign(empty_box, GTK_ALIGN_CENTER);
-        gtk_widget_set_halign(empty_box, GTK_ALIGN_CENTER);
-        gtk_widget_set_vexpand(empty_box, TRUE);
-        gtk_widget_set_hexpand(empty_box, TRUE);
-        
-        gtk_box_pack_start(GTK_BOX(empty_box), icon, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(empty_box), lbl, FALSE, FALSE, 0);
-        
-        gtk_box_pack_start(GTK_BOX(notifications_box), empty_box, TRUE, TRUE, 0);
-    } else {
-        // Add "Clear History" button at the top
-        GtkWidget *clear_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-        gtk_widget_set_halign(clear_box, GTK_ALIGN_END);
-        gtk_widget_set_margin_bottom(clear_box, 8);
-        gtk_widget_set_margin_end(clear_box, 8);
-        
-        GtkWidget *clear_btn = gtk_button_new();
-        gtk_style_context_add_class(gtk_widget_get_style_context(clear_btn), "clear-btn");
-        g_signal_connect(clear_btn, "clicked", G_CALLBACK(on_clear_history_clicked), NULL);
-        
-        GtkWidget *clear_btn_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-        
-        GtkWidget *clear_icon = gtk_image_new_from_icon_name("edit-delete-symbolic", GTK_ICON_SIZE_MENU);
-        gtk_style_context_add_class(gtk_widget_get_style_context(clear_icon), "clear-btn-icon");
-        
-        GtkWidget *clear_lbl = gtk_label_new("Clear History");
-        gtk_style_context_add_class(gtk_widget_get_style_context(clear_lbl), "clear-btn-label");
-        
-        gtk_box_pack_start(GTK_BOX(clear_btn_box), clear_icon, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(clear_btn_box), clear_lbl, FALSE, FALSE, 0);
-        gtk_container_add(GTK_CONTAINER(clear_btn), clear_btn_box);
-        
-        gtk_box_pack_start(GTK_BOX(clear_box), clear_btn, FALSE, FALSE, 0);
-        gtk_box_pack_start(GTK_BOX(notifications_box), clear_box, FALSE, FALSE, 0);
-
-        // Build the list
-        for (GList *l = history; l != NULL; l = l->next) {
-            NotificationData *n = (NotificationData*)l->data;
-            
-            GtkWidget *card = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-            gtk_style_context_add_class(gtk_widget_get_style_context(card), "card");
-            gtk_widget_set_hexpand(card, TRUE);
-
-            // Icon
-            GtkWidget *icon;
-            if (n->icon_path && strlen(n->icon_path) > 0 && g_file_test(n->icon_path, G_FILE_TEST_EXISTS)) {
-                GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(n->icon_path, 32, 32, TRUE, NULL);
-                if (pixbuf) {
-                    icon = gtk_image_new_from_pixbuf(pixbuf);
-                    g_object_unref(pixbuf);
-                } else {
-                    icon = gtk_image_new_from_icon_name("preferences-system-details", GTK_ICON_SIZE_DND);
-                }
-            } else {
-                icon = gtk_image_new_from_icon_name("preferences-system-details", GTK_ICON_SIZE_DND);
-            }
-            gtk_widget_set_valign(icon, GTK_ALIGN_START);
-
-            // Text Box
-            GtkWidget *text_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
-            
-            GtkWidget *app_lbl = gtk_label_new(n->app_name);
-            gtk_widget_set_halign(app_lbl, GTK_ALIGN_START);
-            gtk_style_context_add_class(gtk_widget_get_style_context(app_lbl), "perf-title");
-
-            GtkWidget *sum_lbl = gtk_label_new(n->summary);
-            gtk_widget_set_halign(sum_lbl, GTK_ALIGN_START);
-            gtk_label_set_line_wrap(GTK_LABEL(sum_lbl), TRUE);
-            gtk_style_context_add_class(gtk_widget_get_style_context(sum_lbl), "dnd-title");
-
-            GtkWidget *body_lbl = gtk_label_new(n->body);
-            gtk_widget_set_halign(body_lbl, GTK_ALIGN_START);
-            gtk_label_set_line_wrap(GTK_LABEL(body_lbl), TRUE);
-            gtk_style_context_add_class(gtk_widget_get_style_context(body_lbl), "perf-label");
-
-            gtk_box_pack_start(GTK_BOX(text_box), app_lbl, FALSE, FALSE, 0);
-            gtk_box_pack_start(GTK_BOX(text_box), sum_lbl, FALSE, FALSE, 0);
-            gtk_box_pack_start(GTK_BOX(text_box), body_lbl, FALSE, FALSE, 0);
-
-            gtk_box_pack_start(GTK_BOX(card), icon, FALSE, FALSE, 0);
-            gtk_box_pack_start(GTK_BOX(card), text_box, TRUE, TRUE, 0);
-
-            gtk_box_pack_start(GTK_BOX(notifications_box), card, FALSE, FALSE, 0);
-        }
-    }
-    gtk_widget_show_all(notifications_box);
-}
-
-static void set_tab_active(GtkWidget *active_btn, GtkWidget *inactive_btn) {
-
-    GtkStyleContext *ctx1 = gtk_widget_get_style_context(active_btn);
-    GtkStyleContext *ctx2 = gtk_widget_get_style_context(inactive_btn);
-    gtk_style_context_add_class(ctx1, "tab-active");
-    gtk_style_context_remove_class(ctx2, "tab-active");
-}
-
-static void on_tab_controls_clicked(GtkButton *btn, gpointer user_data) {
-    gtk_stack_set_visible_child_name(GTK_STACK(stack), "controls");
-    set_tab_active(btn_controls, btn_notifications);
-}
-
-static void on_tab_notifications_clicked(GtkButton *btn, gpointer user_data) {
-    gtk_stack_set_visible_child_name(GTK_STACK(stack), "notifications");
-    set_tab_active(btn_notifications, btn_controls);
 }
 
 static GtkWidget* create_controls_page() {
@@ -783,30 +636,72 @@ static GtkWidget* create_controls_page() {
     }
     gtk_box_pack_start(GTK_BOX(card_perf), box_perf_btns, FALSE, FALSE, 0);
 
-    // DND Card
-    GtkWidget *card_dnd = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    gtk_style_context_add_class(gtk_widget_get_style_context(card_dnd), "card");
-    gtk_widget_set_valign(card_dnd, GTK_ALIGN_CENTER);
-    gtk_widget_set_hexpand(card_dnd, TRUE);
+    // Quick Actions Card: Dark Mode | Settings | Screenshot
+    GtkWidget *card_actions = gtk_box_new(GTK_ORIENTATION_VERTICAL, 0);
+    gtk_style_context_add_class(gtk_widget_get_style_context(card_actions), "card");
+    gtk_widget_set_name(card_actions, "card-actions");
+    gtk_widget_set_hexpand(card_actions, TRUE);
+    gtk_widget_set_vexpand(card_actions, TRUE);
 
-    GtkWidget *icon_dnd = gtk_image_new_from_icon_name("weather-clear-night-symbolic", GTK_ICON_SIZE_BUTTON);
-    gtk_style_context_add_class(gtk_widget_get_style_context(icon_dnd), "perf-icon");
-    GtkWidget *lbl_dnd = gtk_label_new("DND");
-    gtk_label_set_justify(GTK_LABEL(lbl_dnd), GTK_JUSTIFY_LEFT);
-    gtk_style_context_add_class(gtk_widget_get_style_context(lbl_dnd), "dnd-title");
 
-    sw_dnd = gtk_switch_new();
-    gtk_widget_set_valign(sw_dnd, GTK_ALIGN_CENTER);
-    gtk_widget_set_halign(sw_dnd, GTK_ALIGN_END);
-    gtk_widget_set_hexpand(sw_dnd, TRUE);
-    g_signal_connect(sw_dnd, "state-set", G_CALLBACK(on_dnd_switch_activated), NULL);
+    GtkWidget *inner_actions_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
+    gtk_widget_set_halign(inner_actions_box, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(inner_actions_box, GTK_ALIGN_CENTER);
+    gtk_widget_set_margin_top(inner_actions_box, 2);
+    gtk_widget_set_margin_bottom(inner_actions_box, 0);
 
-    gtk_box_pack_start(GTK_BOX(card_dnd), icon_dnd, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(card_dnd), lbl_dnd, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(card_dnd), sw_dnd, TRUE, TRUE, 0);
+
+
+    // Dark Mode toggle button
+    GtkWidget *btn_dark = gtk_button_new();
+    gtk_button_set_relief(GTK_BUTTON(btn_dark), GTK_RELIEF_NONE);
+    gtk_style_context_add_class(gtk_widget_get_style_context(btn_dark), "perf-btn-container");
+    gtk_widget_set_halign(btn_dark, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(btn_dark, GTK_ALIGN_CENTER);
+
+    GtkWidget *vb_dark = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_widget_set_halign(vb_dark, GTK_ALIGN_CENTER);
+    GtkWidget *icon_dark = gtk_image_new_from_icon_name("weather-clear-night-symbolic", GTK_ICON_SIZE_BUTTON);
+    gtk_style_context_add_class(gtk_widget_get_style_context(icon_dark), "perf-icon");
+    gtk_box_pack_start(GTK_BOX(vb_dark), icon_dark, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(btn_dark), vb_dark);
+
+    // Settings button
+    GtkWidget *btn_settings = gtk_button_new();
+    gtk_button_set_relief(GTK_BUTTON(btn_settings), GTK_RELIEF_NONE);
+    gtk_style_context_add_class(gtk_widget_get_style_context(btn_settings), "perf-btn-container");
+    gtk_widget_set_halign(btn_settings, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(btn_settings, GTK_ALIGN_CENTER);
+
+    GtkWidget *vb_settings = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_widget_set_halign(vb_settings, GTK_ALIGN_CENTER);
+    GtkWidget *icon_settings = gtk_image_new_from_icon_name("preferences-system-symbolic", GTK_ICON_SIZE_BUTTON);
+    gtk_style_context_add_class(gtk_widget_get_style_context(icon_settings), "perf-icon");
+    gtk_box_pack_start(GTK_BOX(vb_settings), icon_settings, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(btn_settings), vb_settings);
+
+    // Screenshot button
+    GtkWidget *btn_shot = gtk_button_new();
+    gtk_button_set_relief(GTK_BUTTON(btn_shot), GTK_RELIEF_NONE);
+    gtk_style_context_add_class(gtk_widget_get_style_context(btn_shot), "perf-btn-container");
+    gtk_widget_set_halign(btn_shot, GTK_ALIGN_CENTER);
+    gtk_widget_set_valign(btn_shot, GTK_ALIGN_CENTER);
+
+    GtkWidget *vb_shot = gtk_box_new(GTK_ORIENTATION_VERTICAL, 4);
+    gtk_widget_set_halign(vb_shot, GTK_ALIGN_CENTER);
+    GtkWidget *icon_shot = gtk_image_new_from_icon_name("camera-photo-symbolic", GTK_ICON_SIZE_BUTTON);
+    gtk_style_context_add_class(gtk_widget_get_style_context(icon_shot), "perf-icon");
+    gtk_box_pack_start(GTK_BOX(vb_shot), icon_shot, FALSE, FALSE, 0);
+    gtk_container_add(GTK_CONTAINER(btn_shot), vb_shot);
+
+    gtk_box_pack_start(GTK_BOX(inner_actions_box), btn_dark, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(inner_actions_box), btn_settings, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(inner_actions_box), btn_shot, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(card_actions), inner_actions_box, TRUE, FALSE, 0);
 
     gtk_box_pack_start(GTK_BOX(box_tr), card_perf, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box_tr), card_dnd, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(box_tr), card_actions, TRUE, TRUE, 0);
 
     gtk_box_pack_start(GTK_BOX(row1), card_tl_container, FALSE, TRUE, 0);
 
@@ -960,23 +855,7 @@ static GtkWidget* create_controls_page() {
     return page;
 }
 
-static GtkWidget* create_notifications_page() {
-    GtkWidget *scroll = gtk_scrolled_window_new(NULL, NULL);
-    gtk_scrolled_window_set_policy(GTK_SCROLLED_WINDOW(scroll), GTK_POLICY_NEVER, GTK_POLICY_AUTOMATIC);
-    gtk_widget_set_vexpand(scroll, TRUE);
-    gtk_widget_set_hexpand(scroll, TRUE);
 
-    notifications_box = gtk_box_new(GTK_ORIENTATION_VERTICAL, 16);
-    gtk_widget_set_margin_top(notifications_box, 16);
-    gtk_widget_set_margin_bottom(notifications_box, 16);
-    // Align content nicely around center when empty or list when filled
-    gtk_widget_set_valign(notifications_box, GTK_ALIGN_START);
-    gtk_widget_set_halign(notifications_box, GTK_ALIGN_FILL);
-
-    gtk_container_add(GTK_CONTAINER(scroll), notifications_box);
-
-    return scroll;
-}
 
 GtkWidget* init_control_center(void) {
     const gint panel_offset = 0;
@@ -1038,44 +917,17 @@ GtkWidget* init_control_center(void) {
     gtk_box_pack_start(GTK_BOX(box_left), arrow, FALSE, FALSE, 0);
     gtk_box_pack_start(GTK_BOX(box_left), title, FALSE, FALSE, 0);
 
-    // Header Right
-    GtkWidget *box_right = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
-    gtk_widget_set_halign(box_right, GTK_ALIGN_END);
-
-    btn_controls = gtk_button_new_with_label("Controls");
-    btn_notifications = gtk_button_new_with_label("Notifications");
-
-    gtk_style_context_add_class(gtk_widget_get_style_context(btn_controls), "tab-button");
-    gtk_style_context_add_class(gtk_widget_get_style_context(btn_notifications), "tab-button");
-    set_tab_active(btn_controls, btn_notifications);
-
-    g_signal_connect(btn_controls, "clicked", G_CALLBACK(on_tab_controls_clicked), NULL);
-    g_signal_connect(btn_notifications, "clicked", G_CALLBACK(on_tab_notifications_clicked), NULL);
-
-    gtk_box_pack_start(GTK_BOX(box_right), btn_controls, FALSE, FALSE, 0);
-    gtk_box_pack_start(GTK_BOX(box_right), btn_notifications, FALSE, FALSE, 0);
-
-    // Pack left and right
+    // Now we just pack controls_page directly, no header right buttons required
     gtk_box_pack_start(GTK_BOX(header_box), box_left, FALSE, FALSE, 0);
     
     GtkWidget *spacer = gtk_label_new("");
     gtk_widget_set_hexpand(spacer, TRUE);
     gtk_box_pack_start(GTK_BOX(header_box), spacer, TRUE, TRUE, 0);
 
-    gtk_box_pack_start(GTK_BOX(header_box), box_right, FALSE, FALSE, 0);
-
     gtk_box_pack_start(GTK_BOX(main_box), header_box, FALSE, FALSE, 0);
 
-    // Stack
-    stack = gtk_stack_new();
-    gtk_stack_set_transition_type(GTK_STACK(stack), GTK_STACK_TRANSITION_TYPE_CROSSFADE);
-    gtk_box_pack_start(GTK_BOX(main_box), stack, TRUE, TRUE, 0);
-
     GtkWidget *controls_page = create_controls_page();
-    GtkWidget *notifications_page = create_notifications_page();
-
-    gtk_stack_add_named(GTK_STACK(stack), controls_page, "controls");
-    gtk_stack_add_named(GTK_STACK(stack), notifications_page, "notifications");
+    gtk_box_pack_start(GTK_BOX(main_box), controls_page, TRUE, TRUE, 0);
 
     gtk_widget_show_all(main_box);
     gtk_widget_hide(popover);
@@ -1083,7 +935,7 @@ GtkWidget* init_control_center(void) {
     pulse_volume_init(on_pulse_volume_changed, NULL);
     power_profile_init(on_power_profile_changed, NULL);
     mpris_control_init(on_mpris_state_changed, NULL);
-    venom_notifications_init(on_notifications_updated, on_dnd_state_changed, NULL);
+
     network_init_state(on_wifi_state_changed, on_eth_state_changed);
     brightness_init(on_brightness_changed, NULL);
 

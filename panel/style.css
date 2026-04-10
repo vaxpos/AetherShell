@@ -87,6 +87,11 @@ popover contents {
     padding: 16px;
 }
 
+#card-actions {
+    padding: 8px;
+}
+
+
 .circular-icon-btn {
     background-color: transparent;
     border: none;
