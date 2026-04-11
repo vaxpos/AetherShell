@@ -9,6 +9,7 @@
 
 #include <gtk/gtk.h>
 #include <gdk/gdkx.h>
+#include <gdk/gdkwayland.h>
 #include <gio/gio.h>
 #include <gio/gdesktopappinfo.h>
 #include <stdlib.h>

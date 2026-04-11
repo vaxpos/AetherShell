@@ -19,8 +19,12 @@ static void on_dialog_realize_disable_decorations(GtkWidget *widget, gpointer da
     gdk_window = gtk_widget_get_window(widget);
     if (!gdk_window) return;
 
-    gdk_window_set_decorations(gdk_window, 0);
-    gdk_window_set_functions(gdk_window, 0);
+    if (GDK_IS_WAYLAND_WINDOW(gdk_window)) {
+        gdk_wayland_window_announce_csd(gdk_window);
+    } else {
+        gdk_window_set_decorations(gdk_window, 0);
+        gdk_window_set_functions(gdk_window, 0);
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════════
