@@ -15,6 +15,7 @@
 #include "bt_indicator.h"
 #include "sidebar_popup.h"
 #include "notifications_ui.h"
+#include "window_backend.h"
 
 static GtkWidget *time_label;
 static const gint PANEL_HEIGHT = 32;
@@ -110,18 +111,15 @@ static gboolean get_primary_monitor_geometry(GdkScreen *screen, GdkRectangle *ge
 }
 
 static void setup_wayfire_layer_shell(GtkWidget *window) {
-    gtk_layer_init_for_window(GTK_WINDOW(window));
-    gtk_layer_set_namespace(GTK_WINDOW(window), "con-panel");
-    gtk_layer_set_layer(GTK_WINDOW(window), GTK_LAYER_SHELL_LAYER_TOP);
-    gtk_layer_set_anchor(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_BOTTOM, FALSE);
-    gtk_layer_auto_exclusive_zone_enable(GTK_WINDOW(window));
-    gtk_layer_set_keyboard_mode(GTK_WINDOW(window), GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
-    gtk_layer_set_margin(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP, 0);
-    gtk_layer_set_margin(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT, 0);
-    gtk_layer_set_margin(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
+    panel_window_backend_init_panel(GTK_WINDOW(window), "con-panel");
+    panel_window_backend_set_anchor(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_BOTTOM, FALSE);
+    panel_window_backend_auto_exclusive_zone_enable(GTK_WINDOW(window));
+    panel_window_backend_set_margin(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_TOP, 0);
+    panel_window_backend_set_margin(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_LEFT, 0);
+    panel_window_backend_set_margin(GTK_WINDOW(window), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
 }
 
 static gboolean update_time(gpointer data) {

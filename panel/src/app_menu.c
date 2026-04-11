@@ -2,6 +2,7 @@
 #include <gtk-layer-shell.h>
 #include "app_menu.h"
 #include "power_actions.h" // For sleep, restart, shutdown, logout
+#include "window_backend.h"
 
 static gboolean draw_app_menu_background(GtkWidget *widget, cairo_t *cr, gpointer user_data) {
     GtkAllocation alloc;
@@ -134,14 +135,14 @@ GtkWidget* init_app_menu(void) {
     gtk_window_set_decorated(GTK_WINDOW(popover), FALSE);
     gtk_window_set_resizable(GTK_WINDOW(popover), FALSE);
     gtk_window_set_type_hint(GTK_WINDOW(popover), GDK_WINDOW_TYPE_HINT_POPUP_MENU);
-    gtk_layer_init_for_window(GTK_WINDOW(popover));
-    gtk_layer_set_namespace(GTK_WINDOW(popover), "vaxpwy-app-menu");
-    gtk_layer_set_layer(GTK_WINDOW(popover), GTK_LAYER_SHELL_LAYER_TOP);
-    gtk_layer_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
-    gtk_layer_set_keyboard_mode(GTK_WINDOW(popover), GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
-    gtk_layer_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, panel_offset);
-    gtk_layer_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_LEFT, 0);
+    panel_window_backend_init_popup(GTK_WINDOW(popover),
+                                    "vaxpwy-app-menu",
+                                    GDK_WINDOW_TYPE_HINT_POPUP_MENU,
+                                    GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
+    panel_window_backend_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
+    panel_window_backend_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, panel_offset);
+    panel_window_backend_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_LEFT, 0);
     ensure_rgba_visual(popover);
     
     panel_surface = gtk_event_box_new();

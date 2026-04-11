@@ -12,6 +12,7 @@
  */
 #include <gtk/gtk.h>
 #include <gtk-layer-shell.h>
+#include "window_backend.h"
 #include <time.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -1167,12 +1168,12 @@ static void reposition_sidebar_popup(GtkWidget *popup, GtkWidget *relative_to) {
                     monitor.x + monitor.width - SIDEBAR_POPUP_WIDTH - SIDEBAR_POPUP_PAD);
     popup_y = monitor.y;
 
-    gtk_layer_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_RIGHT, FALSE);
-    gtk_layer_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_BOTTOM, FALSE);
-    gtk_layer_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, popup_y - monitor.y);
-    gtk_layer_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, popup_x - monitor.x);
+    panel_window_backend_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_RIGHT, FALSE);
+    panel_window_backend_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_BOTTOM, FALSE);
+    panel_window_backend_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, popup_y - monitor.y);
+    panel_window_backend_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, popup_x - monitor.x);
 }
 
 GtkWidget *init_sidebar_popup(void) {
@@ -1186,14 +1187,14 @@ GtkWidget *init_sidebar_popup(void) {
     gtk_window_set_type_hint(GTK_WINDOW(popup), GDK_WINDOW_TYPE_HINT_POPUP_MENU);
     gtk_widget_set_app_paintable(popup, TRUE);
 
-    gtk_layer_init_for_window(GTK_WINDOW(popup));
-    gtk_layer_set_namespace(GTK_WINDOW(popup), "aether-sidebar-popup");
-    gtk_layer_set_layer(GTK_WINDOW(popup), GTK_LAYER_SHELL_LAYER_TOP);
-    gtk_layer_set_keyboard_mode(GTK_WINDOW(popup), GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
-    gtk_layer_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
-    gtk_layer_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, 0);
-    gtk_layer_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, 8);
+    panel_window_backend_init_popup(GTK_WINDOW(popup),
+                                    "aether-sidebar-popup",
+                                    GDK_WINDOW_TYPE_HINT_POPUP_MENU,
+                                    GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
+    panel_window_backend_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
+    panel_window_backend_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_TOP, 0);
+    panel_window_backend_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, 8);
     ensure_rgba_visual(popup);
     g_signal_connect(popup, "draw", G_CALLBACK(draw_sidebar_popup_clear), NULL);
     ensure_rgba_visual(surface);

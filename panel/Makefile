@@ -22,7 +22,7 @@ SRC      = src/panel.c src/control_center_ui.c src/app_menu.c \
            src/workspaces.c src/keyboard_layout.c src/sni_tray.c src/resource_paths.c \
            src/network_actions.c src/brightness_control.c src/volume_indicator.c \
            src/mic_indicator.c src/wifi_indicator.c src/sidebar.c src/notifications_ui.c \
-           src/bluetooth_manager.c src/bt_indicator.c
+           src/bluetooth_manager.c src/bt_indicator.c src/window_backend.c
 INCLUDES = -Iinclude
 
 panel: $(SRC)

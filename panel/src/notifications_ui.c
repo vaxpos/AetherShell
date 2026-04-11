@@ -3,6 +3,7 @@
 #include "venom_notifications.h"
 #include "resource_paths.h"
 #include "notifications_ui.h"
+#include "window_backend.h"
 
 static GtkWidget *sw_dnd;
 static GtkWidget *notifications_box;
@@ -196,14 +197,14 @@ GtkWidget* init_notifications_ui(void) {
     gtk_window_set_decorated(GTK_WINDOW(popover), FALSE);
     gtk_window_set_resizable(GTK_WINDOW(popover), FALSE);
     gtk_window_set_type_hint(GTK_WINDOW(popover), GDK_WINDOW_TYPE_HINT_POPUP_MENU);
-    gtk_layer_init_for_window(GTK_WINDOW(popover));
-    gtk_layer_set_namespace(GTK_WINDOW(popover), "vaxpwy-notifications");
-    gtk_layer_set_layer(GTK_WINDOW(popover), GTK_LAYER_SHELL_LAYER_TOP);
-    gtk_layer_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
-    gtk_layer_set_keyboard_mode(GTK_WINDOW(popover), GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
-    gtk_layer_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, panel_offset);
-    gtk_layer_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
+    panel_window_backend_init_popup(GTK_WINDOW(popover),
+                                    "vaxpwy-notifications",
+                                    GDK_WINDOW_TYPE_HINT_POPUP_MENU,
+                                    GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
+    panel_window_backend_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+    panel_window_backend_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, panel_offset);
+    panel_window_backend_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
     ensure_rgba_visual(popover);
     
     GtkWidget *panel_surface = gtk_event_box_new();

@@ -10,6 +10,7 @@
 #include "network_actions.h"
 #include "brightness_control.h"
 #include "bluetooth_manager.h"
+#include "window_backend.h"
 
 static GtkWidget *bt_wifi = NULL;
 static GtkWidget *bt_eth  = NULL;
@@ -1058,14 +1059,14 @@ GtkWidget* init_control_center(void) {
     gtk_window_set_decorated(GTK_WINDOW(popover), FALSE);
     gtk_window_set_resizable(GTK_WINDOW(popover), FALSE);
     gtk_window_set_type_hint(GTK_WINDOW(popover), GDK_WINDOW_TYPE_HINT_POPUP_MENU);
-    gtk_layer_init_for_window(GTK_WINDOW(popover));
-    gtk_layer_set_namespace(GTK_WINDOW(popover), "vaxpwy-control-center");
-    gtk_layer_set_layer(GTK_WINDOW(popover), GTK_LAYER_SHELL_LAYER_TOP);
-    gtk_layer_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
-    gtk_layer_set_keyboard_mode(GTK_WINDOW(popover), GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
-    gtk_layer_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, panel_offset);
-    gtk_layer_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
+    panel_window_backend_init_popup(GTK_WINDOW(popover),
+                                    "vaxpwy-control-center",
+                                    GDK_WINDOW_TYPE_HINT_POPUP_MENU,
+                                    GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
+    panel_window_backend_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+    panel_window_backend_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_TOP, panel_offset);
+    panel_window_backend_set_margin(GTK_WINDOW(popover), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
     ensure_rgba_visual(popover);
     
     panel_surface = gtk_event_box_new();

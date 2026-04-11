@@ -9,6 +9,7 @@
 
 #include "mic_indicator.h"
 #include "pulse_volume.h"
+#include "window_backend.h"
 #include <gtk-layer-shell.h>
 #include <string.h>
 #include <stdio.h>
@@ -205,14 +206,14 @@ static void create_mic_mixer_window(void)
     gtk_window_set_type_hint(GTK_WINDOW(mic_mixer_window), GDK_WINDOW_TYPE_HINT_POPUP_MENU);
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(mic_mixer_window), TRUE);
 
-    gtk_layer_init_for_window(GTK_WINDOW(mic_mixer_window));
-    gtk_layer_set_namespace(GTK_WINDOW(mic_mixer_window), "vaxpwy-mic-mixer");
-    gtk_layer_set_layer(GTK_WINDOW(mic_mixer_window), GTK_LAYER_SHELL_LAYER_TOP);
-    gtk_layer_set_anchor(GTK_WINDOW(mic_mixer_window), GTK_LAYER_SHELL_EDGE_TOP,   TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(mic_mixer_window), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
-    gtk_layer_set_margin(GTK_WINDOW(mic_mixer_window), GTK_LAYER_SHELL_EDGE_TOP,   32);
-    gtk_layer_set_margin(GTK_WINDOW(mic_mixer_window), GTK_LAYER_SHELL_EDGE_RIGHT,  0);
-    gtk_layer_set_keyboard_mode(GTK_WINDOW(mic_mixer_window), GTK_LAYER_SHELL_KEYBOARD_MODE_ON_DEMAND);
+    panel_window_backend_init_popup(GTK_WINDOW(mic_mixer_window),
+                                    "vaxpwy-mic-mixer",
+                                    GDK_WINDOW_TYPE_HINT_POPUP_MENU,
+                                    GTK_LAYER_SHELL_KEYBOARD_MODE_ON_DEMAND);
+    panel_window_backend_set_anchor(GTK_WINDOW(mic_mixer_window), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(mic_mixer_window), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+    panel_window_backend_set_margin(GTK_WINDOW(mic_mixer_window), GTK_LAYER_SHELL_EDGE_TOP, 32);
+    panel_window_backend_set_margin(GTK_WINDOW(mic_mixer_window), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
 
     GdkScreen  *scr = gtk_widget_get_screen(mic_mixer_window);
     GdkVisual  *vis = gdk_screen_get_rgba_visual(scr);

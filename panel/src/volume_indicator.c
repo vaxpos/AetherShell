@@ -10,6 +10,7 @@
 
 #include "volume_indicator.h"
 #include "pulse_volume.h"
+#include "window_backend.h"
 #include <gtk-layer-shell.h>
 #include <string.h>
 #include <stdio.h>
@@ -221,14 +222,14 @@ static void create_mixer_window(void)
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(mixer_window), TRUE);
 
     /* Use gtk-layer-shell so it floats above everything on Wayland */
-    gtk_layer_init_for_window(GTK_WINDOW(mixer_window));
-    gtk_layer_set_namespace(GTK_WINDOW(mixer_window), "vaxpwy-volume-mixer");
-    gtk_layer_set_layer(GTK_WINDOW(mixer_window), GTK_LAYER_SHELL_LAYER_TOP);
-    gtk_layer_set_anchor(GTK_WINDOW(mixer_window), GTK_LAYER_SHELL_EDGE_TOP,   TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(mixer_window), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
-    gtk_layer_set_margin(GTK_WINDOW(mixer_window), GTK_LAYER_SHELL_EDGE_TOP,   32);
-    gtk_layer_set_margin(GTK_WINDOW(mixer_window), GTK_LAYER_SHELL_EDGE_RIGHT,  0);
-    gtk_layer_set_keyboard_mode(GTK_WINDOW(mixer_window), GTK_LAYER_SHELL_KEYBOARD_MODE_ON_DEMAND);
+    panel_window_backend_init_popup(GTK_WINDOW(mixer_window),
+                                    "vaxpwy-volume-mixer",
+                                    GDK_WINDOW_TYPE_HINT_POPUP_MENU,
+                                    GTK_LAYER_SHELL_KEYBOARD_MODE_ON_DEMAND);
+    panel_window_backend_set_anchor(GTK_WINDOW(mixer_window), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(mixer_window), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+    panel_window_backend_set_margin(GTK_WINDOW(mixer_window), GTK_LAYER_SHELL_EDGE_TOP, 32);
+    panel_window_backend_set_margin(GTK_WINDOW(mixer_window), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
 
     /* RGBA visual for transparency */
     GdkScreen  *scr = gtk_widget_get_screen(mixer_window);

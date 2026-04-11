@@ -1,4 +1,5 @@
 #include "battery_indicator.h"
+#include "window_backend.h"
 #include <gio/gio.h>
 #include <gtk-layer-shell.h>
 #include <math.h>
@@ -304,14 +305,14 @@ static void create_battery_popup_window(void) {
     gtk_window_set_type_hint(GTK_WINDOW(battery_popup), GDK_WINDOW_TYPE_HINT_POPUP_MENU);
     gtk_window_set_skip_taskbar_hint(GTK_WINDOW(battery_popup), TRUE);
 
-    gtk_layer_init_for_window(GTK_WINDOW(battery_popup));
-    gtk_layer_set_namespace(GTK_WINDOW(battery_popup), "vaxpwy-battery");
-    gtk_layer_set_layer(GTK_WINDOW(battery_popup), GTK_LAYER_SHELL_LAYER_TOP);
-    gtk_layer_set_anchor(GTK_WINDOW(battery_popup), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(battery_popup), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
-    gtk_layer_set_margin(GTK_WINDOW(battery_popup), GTK_LAYER_SHELL_EDGE_TOP, 32);
-    gtk_layer_set_margin(GTK_WINDOW(battery_popup), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
-    gtk_layer_set_keyboard_mode(GTK_WINDOW(battery_popup), GTK_LAYER_SHELL_KEYBOARD_MODE_ON_DEMAND);
+    panel_window_backend_init_popup(GTK_WINDOW(battery_popup),
+                                    "vaxpwy-battery",
+                                    GDK_WINDOW_TYPE_HINT_POPUP_MENU,
+                                    GTK_LAYER_SHELL_KEYBOARD_MODE_ON_DEMAND);
+    panel_window_backend_set_anchor(GTK_WINDOW(battery_popup), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+    panel_window_backend_set_anchor(GTK_WINDOW(battery_popup), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+    panel_window_backend_set_margin(GTK_WINDOW(battery_popup), GTK_LAYER_SHELL_EDGE_TOP, 32);
+    panel_window_backend_set_margin(GTK_WINDOW(battery_popup), GTK_LAYER_SHELL_EDGE_RIGHT, 0);
 
     screen = gtk_widget_get_screen(battery_popup);
     visual = gdk_screen_get_rgba_visual(screen);
