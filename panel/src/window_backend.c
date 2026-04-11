@@ -7,6 +7,7 @@ typedef struct {
     gboolean anchors[4];
     gint margins[4];
     gboolean auto_exclusive_zone;
+    guint reposition_idle_id; /* pending g_idle_add for X11 repositioning */
 } WindowBackendState;
 
 typedef enum {
@@ -124,35 +125,69 @@ static void sync_x11_window_position(GtkWindow *window) {
     gtk_window_move(window, x, y);
 }
 
-static void on_backend_window_realize(GtkWidget *widget, gpointer user_data) {
-    GtkWindow *window = GTK_WINDOW(widget);
+/* ─── Phase 1-B: deferred single-shot repositioning ─────────────────── */
 
+static gboolean reposition_idle_cb(gpointer data) {
+    GtkWindow *window = GTK_WINDOW(data);
+    WindowBackendState *state = get_backend_state(window);
+
+    if (state) state->reposition_idle_id = 0;
+    sync_x11_window_position(window);
+    return G_SOURCE_REMOVE;
+}
+
+/**
+ * Schedule a single repositioning pass on the next idle cycle.
+ * Multiple calls before the idle fires are collapsed into one.
+ */
+static void schedule_x11_reposition(GtkWindow *window) {
+    WindowBackendState *state = get_backend_state(window);
+
+    if (!state || state->reposition_idle_id) return;
+    state->reposition_idle_id = g_idle_add(reposition_idle_cb, window);
+}
+
+/* Cancel pending idle when the window is destroyed (Phase 1-D). */
+static void on_backend_window_destroy(GtkWidget *widget, gpointer user_data) {
+    WindowBackendState *state;
+
+    (void)user_data;
+
+    state = get_backend_state(GTK_WINDOW(widget));
+    if (state && state->reposition_idle_id) {
+        g_source_remove(state->reposition_idle_id);
+        state->reposition_idle_id = 0;
+    }
+}
+
+/* ─── Phase 1-A: realize-only sync (configure-event handler removed) ─── */
+
+static void on_backend_window_realize(GtkWidget *widget, gpointer user_data) {
     (void)user_data;
 
     if (panel_window_backend_is_wayland()) return;
-    sync_x11_window_position(window);
+    sync_x11_window_position(GTK_WINDOW(widget));
 }
 
-static gboolean on_backend_window_configure(GtkWidget *widget, GdkEvent *event, gpointer user_data) {
-    GtkWindow *window = GTK_WINDOW(widget);
-
-    (void)event;
-    (void)user_data;
-
-    if (!panel_window_backend_is_wayland()) {
-        sync_x11_window_position(window);
-    }
-    return FALSE;
-}
+/* ─── Phase 1-C: GDK_HINT_POS tells the WM the position is intentional ─ */
 
 static void init_x11_window(GtkWindow *window) {
+    GdkGeometry geo;
+
     gtk_window_set_skip_taskbar_hint(window, TRUE);
     gtk_window_set_skip_pager_hint(window, TRUE);
     gtk_window_set_keep_above(window, TRUE);
     gtk_window_stick(window);
 
+    /* Tell the WM not to relocate this window on its own. */
+    geo.min_width  = 0;
+    geo.min_height = 0;
+    gtk_window_set_geometry_hints(window, NULL, &geo, GDK_HINT_POS);
+
+    /* Only realize is needed; configure-event caused an infinite feedback
+     * loop on X11 (move → configure → move → …). */
     g_signal_connect(window, "realize", G_CALLBACK(on_backend_window_realize), NULL);
-    g_signal_connect(window, "configure-event", G_CALLBACK(on_backend_window_configure), NULL);
+    g_signal_connect(window, "destroy", G_CALLBACK(on_backend_window_destroy), NULL);
 }
 
 void panel_window_backend_init_panel(GtkWindow *window, const char *namespace_name) {
@@ -200,7 +235,8 @@ void panel_window_backend_set_anchor(GtkWindow *window,
     if (panel_window_backend_is_wayland()) {
         gtk_layer_set_anchor(window, edge, anchor_to_edge);
     } else {
-        sync_x11_window_position(window);
+        /* Phase 1-B: schedule deferred repositioning instead of syncing now. */
+        schedule_x11_reposition(window);
     }
 }
 
@@ -218,7 +254,8 @@ void panel_window_backend_set_margin(GtkWindow *window,
     if (panel_window_backend_is_wayland()) {
         gtk_layer_set_margin(window, edge, margin);
     } else {
-        sync_x11_window_position(window);
+        /* Phase 1-B: schedule deferred repositioning instead of syncing now. */
+        schedule_x11_reposition(window);
     }
 }
 

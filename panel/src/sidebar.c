@@ -266,38 +266,28 @@ static long long read_ll_file_local(const char *path) {
     return v;
 }
 
+/* ─── VRAM: read from sysfs only (no popen) — safe to call from any thread ── */
 static void read_vram_usage(void) {
-    vram_used_mb = 0;
+    vram_used_mb  = 0;
     vram_total_mb = 0;
 
-    FILE *f = popen("nvidia-smi --query-gpu=memory.used,memory.total --format=csv,noheader,nounits 2>/dev/null", "r");
-    if (f) {
-        float used = 0, total = 0;
-        char line[128] = {0};
-        if (fgets(line, sizeof(line), f)) {
-            for (char *p = line; *p; p++) if (*p == ',') *p = ' ';
-            if (sscanf(line, "%f %f", &used, &total) == 2 && total > 0) {
-                vram_used_mb = used;
-                vram_total_mb = total;
-                pclose(f);
-                return;
-            }
-        }
-        pclose(f);
-    }
-
+    /* Prefer sysfs (AMD / Intel) — zero blocking cost */
     for (int i = 0; i < 4; i++) {
         char used_path[256], total_path[256];
-        snprintf(used_path, sizeof(used_path), "/sys/class/drm/card%d/device/mem_info_vram_used", i);
-        snprintf(total_path, sizeof(total_path), "/sys/class/drm/card%d/device/mem_info_vram_total", i);
-        long long used = read_ll_file_local(used_path);
+        snprintf(used_path,  sizeof(used_path),
+                 "/sys/class/drm/card%d/device/mem_info_vram_used",  i);
+        snprintf(total_path, sizeof(total_path),
+                 "/sys/class/drm/card%d/device/mem_info_vram_total", i);
+        long long used  = read_ll_file_local(used_path);
         long long total = read_ll_file_local(total_path);
         if (used > 0 && total > 0) {
-            vram_used_mb = used / (1024.0 * 1024.0);
+            vram_used_mb  = used  / (1024.0 * 1024.0);
             vram_total_mb = total / (1024.0 * 1024.0);
             return;
         }
     }
+    /* NVIDIA: nvidia-smi is expensive — queried asynchronously in
+     * heavy_stats_thread() below; skip here to avoid blocking. */
 }
 
 static void rrect(cairo_t *cr, double x, double y, double w, double h, double r) {
@@ -530,8 +520,13 @@ static gboolean on_net_draw(GtkWidget *w, cairo_t *cr, gpointer _) {
 }
 
 static char* get_ip(void) {
+    /* Read /proc/net/fib_trie or fall back to run_cmd.
+     * We keep run_cmd here because get_ip() is called once at build time
+     * and already deferred to refresh_sysinfo (60s timer) after that.
+     * The initial call is in create_sidebar_content() which now runs
+     * after the window is shown — acceptable one-time cost. */
     return run_cmd(
-        "ip -o -f inet addr show scope global | awk '{print $4}' | head -1");
+        "ip -o -f inet addr show scope global 2>/dev/null | awk '{print $4}' | head -1");
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -581,18 +576,20 @@ static double get_ram_pct(void) {
     }
     fclose(f); return tot>0?(double)(tot-avail)/tot:0;
 }
-static double get_cputemp_norm(void) {
-    FILE *f = popen("cat /sys/class/thermal/thermal_zone*/temp 2>/dev/null | sort -n | tail -1", "r");
-    if (!f) return 0;
-    int t = 0;
-    if (fscanf(f, "%d", &t) != 1) {
-        pclose(f);
-        return 0;
+/* ─── CPU temp: read sysfs directly, no popen ──────────────────────── */
+static int read_cputemp_sysfs(void) {
+    int best = 0;
+    for (int i = 0; i < 16; i++) {
+        char path[128];
+        snprintf(path, sizeof(path),
+                 "/sys/class/thermal/thermal_zone%d/temp", i);
+        FILE *f = fopen(path, "r");
+        if (!f) break;
+        int t = 0;
+        if (fscanf(f, "%d", &t) == 1 && t > best) best = t;
+        fclose(f);
     }
-    pclose(f);
-    t /= 1000;
-    snprintf(rings[1].label, sizeof(rings[1].label), "%d°C", t);
-    return t > 0 ? t / 110.0 : 0;
+    return best / 1000; /* millidegrees → degrees */
 }
 
 static int read_int_file(const char *path) {
@@ -604,39 +601,136 @@ static int read_int_file(const char *path) {
     return v;
 }
 
-static double get_gpu_usage_norm(void) {
-    FILE *f = popen("nvidia-smi --query-gpu=utilization.gpu --format=csv,noheader,nounits 2>/dev/null", "r");
+/* ─── Phase 2: Heavy async stats (nvidia-smi) via GTask ─────────────── */
+
+typedef struct {
+    /* GPU (nvidia-smi or sysfs) */
+    double gpu_usage;   /* 0..1 */
+    double gpu_label;   /* percent integer */
+    double vram_used;   /* MB */
+    double vram_total;  /* MB */
+    /* CPU temp */
+    int    cpu_temp;    /* °C */
+} HeavyStatsResult;
+
+static gboolean s_heavy_running = FALSE; /* prevent overlapping tasks */
+
+/* Runs in a worker thread — NO GTK calls allowed here */
+static void heavy_stats_thread(GTask        *task,
+                               gpointer      source,
+                               gpointer      task_data,
+                               GCancellable *cancellable) {
+    (void)source; (void)task_data; (void)cancellable;
+    HeavyStatsResult *res = g_new0(HeavyStatsResult, 1);
+
+    /* --- nvidia-smi: GPU usage + VRAM (one call for both) --- */
+    FILE *f = popen("nvidia-smi --query-gpu=utilization.gpu,memory.used,memory.total"
+                    " --format=csv,noheader,nounits 2>/dev/null", "r");
     if (f) {
-        int load = 0;
-        if (fscanf(f, "%d", &load) == 1 && load >= 0) {
-            pclose(f);
-            snprintf(rings[2].label, sizeof(rings[2].label), "%d%%", load);
-            return load / 100.0;
+        float gpu = 0, vmused = 0, vmtotal = 0;
+        char line[256] = {0};
+        if (fgets(line, sizeof(line), f)) {
+            /* nvidia-smi output: "gpu%, vmused MB, vmtotal MB" */
+            for (char *p = line; *p; p++) if (*p == ',') *p = ' ';
+            if (sscanf(line, "%f %f %f", &gpu, &vmused, &vmtotal) == 3) {
+                res->gpu_usage  = CLAMP(gpu  / 100.0, 0.0, 1.0);
+                res->gpu_label  = gpu;
+                res->vram_used  = vmused;
+                res->vram_total = vmtotal;
+            }
         }
         pclose(f);
     }
 
-    for (int i = 0; i < 4; i++) {
-        char path[256];
-        snprintf(path, sizeof(path), "/sys/class/drm/card%d/device/gpu_busy_percent", i);
-        int load = read_int_file(path);
-        if (load >= 0) {
-            snprintf(rings[2].label, sizeof(rings[2].label), "%d%%", load);
-            return CLAMP(load / 100.0, 0.0, 1.0);
+    /* --- sysfs GPU fallback (AMD/Intel) if nvidia-smi gave nothing --- */
+    if (res->vram_total <= 0) {
+        for (int i = 0; i < 4; i++) {
+            char p1[256], p2[256];
+            snprintf(p1, sizeof(p1), "/sys/class/drm/card%d/device/mem_info_vram_used",  i);
+            snprintf(p2, sizeof(p2), "/sys/class/drm/card%d/device/mem_info_vram_total", i);
+            long long u = read_ll_file_local(p1);
+            long long t = read_ll_file_local(p2);
+            if (u > 0 && t > 0) {
+                res->vram_used  = u / (1024.0 * 1024.0);
+                res->vram_total = t / (1024.0 * 1024.0);
+                break;
+            }
+        }
+    }
+    if (res->gpu_usage <= 0) {
+        for (int i = 0; i < 4; i++) {
+            char p[256];
+            snprintf(p, sizeof(p), "/sys/class/drm/card%d/device/gpu_busy_percent", i);
+            int load = read_int_file(p);
+            if (load >= 0) {
+                res->gpu_usage = CLAMP(load / 100.0, 0.0, 1.0);
+                res->gpu_label = load;
+                break;
+            }
         }
     }
 
-    return 0;
+    /* --- CPU temp via sysfs (fast, no popen) --- */
+    res->cpu_temp = read_cputemp_sysfs();
+
+    g_task_return_pointer(task, res, g_free);
 }
 
-static gboolean update_gauges(gpointer _) {
-    double cpu=get_cpu_pct(), ram=get_ram_pct();
-    rings[0].val=cpu; snprintf(rings[0].label,sizeof(rings[0].label),"%.0f%%",cpu*100);
-    rings[1].val=get_cputemp_norm();
-    rings[2].val=get_gpu_usage_norm();
-    rings[3].val=ram; snprintf(rings[3].label,sizeof(rings[3].label),"%.0f%%",ram*100);
-    if(gauge_draw) gtk_widget_queue_draw(gauge_draw);
-    return TRUE;
+/* Runs on the GTK main thread after the worker finishes */
+static void on_heavy_stats_done(GObject      *src,
+                                GAsyncResult *result,
+                                gpointer      user_data) {
+    (void)src; (void)user_data;
+    s_heavy_running = FALSE;
+
+    HeavyStatsResult *res = g_task_propagate_pointer(G_TASK(result), NULL);
+    if (!res) return;
+
+    /* Update gauge ring values */
+    rings[2].val = res->gpu_usage;
+    snprintf(rings[2].label, sizeof(rings[2].label), "%.0f%%", res->gpu_label);
+
+    rings[1].val = res->cpu_temp > 0 ? res->cpu_temp / 110.0 : 0;
+    snprintf(rings[1].label, sizeof(rings[1].label), "%d" "\xc2\xb0" "C", res->cpu_temp);
+
+    /* Update VRAM bars */
+    vram_used_mb  = res->vram_used;
+    vram_total_mb = res->vram_total;
+    if (lbl_vram_usage) {
+        char u[32], t[32], buf[72];
+        fmt_mb(vram_used_mb,  u, sizeof(u));
+        fmt_mb(vram_total_mb, t, sizeof(t));
+        snprintf(buf, sizeof(buf), "%s / %s", u, t);
+        gtk_label_set_text(GTK_LABEL(lbl_vram_usage), buf);
+    }
+    if (vram_bar_draw) gtk_widget_queue_draw(vram_bar_draw);
+    if (gauge_draw)    gtk_widget_queue_draw(gauge_draw);
+
+    g_free(res);
+}
+
+/* Timer callback: dispatch async task if none is running */
+static gboolean update_gauges(gpointer user_data) {
+    (void)user_data;
+
+    /* Light, synchronous stats — CPU% and RAM% are trivially fast */
+    double cpu = get_cpu_pct();
+    double ram = get_ram_pct();
+    rings[0].val = cpu;
+    snprintf(rings[0].label, sizeof(rings[0].label), "%.0f%%", cpu * 100);
+    rings[3].val = ram;
+    snprintf(rings[3].label, sizeof(rings[3].label), "%.0f%%", ram * 100);
+    if (gauge_draw) gtk_widget_queue_draw(gauge_draw);
+
+    /* Heavy stats (nvidia-smi, sysfs GPU/VRAM) — run in background thread */
+    if (!s_heavy_running) {
+        s_heavy_running = TRUE;
+        GTask *task = g_task_new(NULL, NULL, on_heavy_stats_done, NULL);
+        g_task_run_in_thread(task, heavy_stats_thread);
+        g_object_unref(task);
+    }
+
+    return G_SOURCE_CONTINUE;
 }
 
 #define RING_RADIUS  26.0
@@ -1053,14 +1147,11 @@ static GtkWidget* create_sidebar_content(void) {
     update_clock(NULL);
     rebuild_calendar();
     update_storage(NULL);
-    update_gauges(NULL);
+    /* update_gauges: first async run deferred 600ms so the window
+     * can render before nvidia-smi starts — avoids startup freeze. */
+    g_timeout_add(600, update_gauges, NULL);
 
-    g_timeout_add(1000,  update_clock,    NULL);
-    g_timeout_add(60000, refresh_sysinfo, NULL);
-    g_timeout_add(2000,  update_storage,  NULL);
-    g_timeout_add(2000,  update_gauges,   NULL);
-    g_timeout_add(1000,  sample_net,      NULL);
-
+    /* Persistent timers stored in sidebar_timers_start/stop below */
     gtk_widget_show_all(card);
     return card;
 }
@@ -1176,6 +1267,27 @@ static void reposition_sidebar_popup(GtkWidget *popup, GtkWidget *relative_to) {
     panel_window_backend_set_margin(GTK_WINDOW(popup), GTK_LAYER_SHELL_EDGE_LEFT, popup_x - monitor.x);
 }
 
+/* ─── Phase 3: timer IDs for start/stop on show/hide ────────────────── */
+static guint s_timer_clock   = 0;
+static guint s_timer_storage = 0;
+static guint s_timer_gauges  = 0;
+static guint s_timer_net     = 0;
+static guint s_timer_sysinfo = 0;
+
+static void sidebar_timers_start(void) {
+    if (!s_timer_clock)   s_timer_clock   = g_timeout_add(1000,  update_clock,    NULL);
+    if (!s_timer_storage) s_timer_storage = g_timeout_add(2000,  update_storage,  NULL);
+    if (!s_timer_gauges)  s_timer_gauges  = g_timeout_add(2000,  update_gauges,   NULL);
+    if (!s_timer_net)     s_timer_net     = g_timeout_add(1000,  sample_net,      NULL);
+    if (!s_timer_sysinfo) s_timer_sysinfo = g_timeout_add(60000, refresh_sysinfo, NULL);
+}
+
+static void sidebar_timers_stop(void) {
+    /* Stop only the GPU-heavy timers; lightweight timers keep running. */
+    if (s_timer_gauges) { g_source_remove(s_timer_gauges); s_timer_gauges = 0; }
+    if (s_timer_net)    { g_source_remove(s_timer_net);    s_timer_net    = 0; }
+}
+
 GtkWidget *init_sidebar_popup(void) {
     GtkWidget *popup = gtk_window_new(GTK_WINDOW_TOPLEVEL);
     GtkWidget *surface = gtk_event_box_new();
@@ -1206,6 +1318,9 @@ GtkWidget *init_sidebar_popup(void) {
     gtk_container_add(GTK_CONTAINER(surface), content);
     gtk_container_add(GTK_CONTAINER(popup), surface);
 
+    /* Start persistent timers once here */
+    sidebar_timers_start();
+
     gtk_widget_show_all(surface);
     gtk_widget_hide(popup);
     return popup;
@@ -1231,8 +1346,15 @@ void sidebar_popup_toggle(GtkWidget *popup, GtkWidget *relative_to) {
     }
 
     if (gtk_widget_get_visible(popup)) {
+        /* Phase 3: pause GPU-heavy timers while sidebar is hidden */
+        sidebar_timers_stop();
         gtk_widget_hide(popup);
     } else {
         gtk_widget_show_all(popup);
+        /* Phase 3: resume timers when sidebar becomes visible */
+        sidebar_timers_start();
+        /* Immediate refresh so values aren't stale after a long hide */
+        update_clock(NULL);
+        update_gauges(NULL);
     }
 }
