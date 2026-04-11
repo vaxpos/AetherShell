@@ -4,6 +4,7 @@
 #include <gtk/gtk.h>
 #include <gtk-layer-shell.h>
 
+void panel_window_backend_detect(void);
 gboolean panel_window_backend_is_wayland(void);
 
 void panel_window_backend_init_panel(GtkWindow *window, const char *namespace_name);

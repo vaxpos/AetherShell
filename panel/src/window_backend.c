@@ -9,6 +9,14 @@ typedef struct {
     gboolean auto_exclusive_zone;
 } WindowBackendState;
 
+typedef enum {
+    PANEL_BACKEND_UNKNOWN = 0,
+    PANEL_BACKEND_X11,
+    PANEL_BACKEND_WAYLAND
+} PanelBackendType;
+
+static PanelBackendType detected_backend = PANEL_BACKEND_UNKNOWN;
+
 static WindowBackendState *get_backend_state(GtkWindow *window) {
     WindowBackendState *state;
 
@@ -25,15 +33,27 @@ static WindowBackendState *get_backend_state(GtkWindow *window) {
     return state;
 }
 
-gboolean panel_window_backend_is_wayland(void) {
+void panel_window_backend_detect(void) {
     GdkDisplay *display = gdk_display_get_default();
 
-    if (!display) return FALSE;
+    if (detected_backend != PANEL_BACKEND_UNKNOWN) return;
+    if (!display) {
+        detected_backend = PANEL_BACKEND_X11;
+        return;
+    }
+
 #ifdef GDK_WINDOWING_WAYLAND
-    return GDK_IS_WAYLAND_DISPLAY(display);
+    detected_backend = GDK_IS_WAYLAND_DISPLAY(display)
+        ? PANEL_BACKEND_WAYLAND
+        : PANEL_BACKEND_X11;
 #else
-    return FALSE;
+    detected_backend = PANEL_BACKEND_X11;
 #endif
+}
+
+gboolean panel_window_backend_is_wayland(void) {
+    panel_window_backend_detect();
+    return detected_backend == PANEL_BACKEND_WAYLAND;
 }
 
 static void sync_x11_window_position(GtkWindow *window) {
