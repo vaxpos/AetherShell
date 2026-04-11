@@ -1,5 +1,7 @@
 #include "compositor_backend.h"
 #include "aether-ipc-v1-client-protocol.h"
+#include "workspaces_xorg.h"
+#include "kb_indicator_xorg.h"
 #include "window_backend.h"
 #include <gio/gio.h>
 #include <gio/gunixsocketaddress.h>
@@ -15,7 +17,8 @@
 typedef enum {
     COMPOSITOR_BACKEND_NONE = 0,
     COMPOSITOR_BACKEND_WAYFIRE,
-    COMPOSITOR_BACKEND_AETHER
+    COMPOSITOR_BACKEND_AETHER,
+    COMPOSITOR_BACKEND_X11
 } CompositorBackendType;
 
 static CompositorBackendType s_backend = COMPOSITOR_BACKEND_NONE;
@@ -40,6 +43,12 @@ static guint s_wayfire_io_watch_id = 0;
 static guint s_wayfire_reconnect_id = 0;
 static guint s_wayfire_workspace_poll_id = 0;
 static gboolean s_wayfire_socket_warned = FALSE;
+
+/* X11 state */
+static XorgWorkspaceState s_xorg_workspace_state = {0};
+static XorgKeyboardState s_xorg_keyboard_state = {0};
+static guint s_xorg_workspace_poll_id = 0;
+static guint s_xorg_keyboard_poll_id = 0;
 
 /* Aether Wayland protocol state */
 static struct wl_display *s_wl_display = NULL;
@@ -499,6 +508,39 @@ static gboolean init_aether_backend(void) {
 #endif
 }
 
+static gboolean refresh_xorg_workspaces(gpointer user_data) {
+    (void)user_data;
+
+    if (!xorg_workspaces_refresh(&s_xorg_workspace_state) && s_have_workspace_state) {
+        return G_SOURCE_CONTINUE;
+    }
+
+    s_workspace_state.output_id = 0;
+    s_workspace_state.x = s_xorg_workspace_state.current_desktop;
+    s_workspace_state.y = 0;
+    s_workspace_state.grid_width = s_xorg_workspace_state.num_desktops;
+    s_workspace_state.grid_height = 1;
+    s_have_workspace_state = TRUE;
+    emit_workspace_state();
+    return G_SOURCE_CONTINUE;
+}
+
+static gboolean refresh_xorg_keyboard(gpointer user_data) {
+    (void)user_data;
+
+    if (!xorg_keyboard_refresh(&s_xorg_keyboard_state) && s_have_keyboard_state) {
+        return G_SOURCE_CONTINUE;
+    }
+
+    g_strlcpy(s_keyboard_state.layouts,
+              s_xorg_keyboard_state.current_layout,
+              sizeof(s_keyboard_state.layouts));
+    s_keyboard_state.layout_index = 0;
+    s_have_keyboard_state = TRUE;
+    emit_keyboard_state();
+    return G_SOURCE_CONTINUE;
+}
+
 void panel_compositor_backend_init(void) {
     if (s_initialized) return;
     s_initialized = TRUE;
@@ -514,6 +556,33 @@ void panel_compositor_backend_init(void) {
         s_wayfire_workspace_poll_id = g_timeout_add(700, refresh_wayfire_workspaces, NULL);
         refresh_wayfire_workspaces(NULL);
         return;
+    }
+
+    if (xorg_workspaces_init(&s_xorg_workspace_state) || xorg_keyboard_init(&s_xorg_keyboard_state)) {
+        s_backend = COMPOSITOR_BACKEND_X11;
+
+        if (s_xorg_workspace_state.dpy) {
+            s_xorg_workspace_poll_id = g_timeout_add(150, refresh_xorg_workspaces, NULL);
+            refresh_xorg_workspaces(NULL);
+        }
+
+        if (s_xorg_keyboard_state.xdisplay) {
+            s_xorg_keyboard_poll_id = g_timeout_add(150, refresh_xorg_keyboard, NULL);
+            refresh_xorg_keyboard(NULL);
+        }
+    }
+}
+
+const char *panel_compositor_backend_name(void) {
+    switch (s_backend) {
+        case COMPOSITOR_BACKEND_AETHER:
+            return "aether";
+        case COMPOSITOR_BACKEND_WAYFIRE:
+            return "wayfire";
+        case COMPOSITOR_BACKEND_X11:
+            return "x11";
+        default:
+            return "none";
     }
 }
 
@@ -549,6 +618,14 @@ gboolean panel_compositor_backend_set_workspace(int output_id, int x, int y) {
         if (!wayfire_ipc_call(request, &parser)) return FALSE;
         if (parser) g_object_unref(parser);
         return TRUE;
+    }
+
+    if (s_backend == COMPOSITOR_BACKEND_X11) {
+        int desktop_idx;
+
+        if (y != 0) return FALSE;
+        desktop_idx = x;
+        return xorg_workspaces_switch(&s_xorg_workspace_state, desktop_idx);
     }
 
     return FALSE;

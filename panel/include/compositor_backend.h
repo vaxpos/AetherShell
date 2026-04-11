@@ -20,6 +20,7 @@ typedef void (*PanelWorkspaceStateCallback)(const PanelWorkspaceState *state, gp
 typedef void (*PanelKeyboardStateCallback)(const PanelKeyboardState *state, gpointer user_data);
 
 void panel_compositor_backend_init(void);
+const char *panel_compositor_backend_name(void);
 void panel_compositor_backend_set_workspace_callback(PanelWorkspaceStateCallback cb, gpointer user_data);
 void panel_compositor_backend_set_keyboard_callback(PanelKeyboardStateCallback cb, gpointer user_data);
 gboolean panel_compositor_backend_set_workspace(int output_id, int x, int y);

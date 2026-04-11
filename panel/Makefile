@@ -14,7 +14,7 @@ $(error Missing build dependencies. Install: libgtk-3-dev libgtk-layer-shell-dev
 endif
 CFLAGS  = -DVAXPWY_PANEL_RESOURCES_DIR=\"$(RESOURCES_DIR)\" \
           $(shell pkg-config --cflags $(PKGS))
-LIBS    = $(shell pkg-config --libs $(PKGS)) -lm
+LIBS    = $(shell pkg-config --libs $(PKGS)) -lX11 -lXext -lm
 
 SRC      = src/panel.c src/control_center_ui.c src/app_menu.c \
            src/battery_indicator.c src/pulse_volume.c src/power_profile.c \
@@ -23,7 +23,8 @@ SRC      = src/panel.c src/control_center_ui.c src/app_menu.c \
            src/network_actions.c src/brightness_control.c src/volume_indicator.c \
            src/mic_indicator.c src/wifi_indicator.c src/sidebar.c src/notifications_ui.c \
            src/bluetooth_manager.c src/bt_indicator.c src/window_backend.c \
-           src/compositor_backend.c src/aether-ipc-v1-client-protocol.c
+           src/compositor_backend.c src/aether-ipc-v1-client-protocol.c \
+           src/workspaces_xorg.c src/kb_indicator_xorg.c
 INCLUDES = -Iinclude
 
 panel: $(SRC)
