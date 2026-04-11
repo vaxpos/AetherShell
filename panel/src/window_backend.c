@@ -22,6 +22,22 @@ typedef enum {
 
 static PanelBackendType detected_backend = PANEL_BACKEND_UNKNOWN;
 
+/* ─── X11 exclusive-zone emulation ───────────────────────────────────
+ * On Wayland, the compositor automatically keeps layer-shell popup windows
+ * below the panel bar's exclusive zone.  On X11 we must replicate this
+ * ourselves: track the panel bar's allocated height and push every popup
+ * window's top-y coordinate so it never overlaps the panel.
+ * ──────────────────────────────────────────────────────────────────── */
+static gint s_x11_exclusive_zone = 0; /* panel bar height on X11 */
+
+static void on_x11_panel_size_allocate(GtkWidget *widget,
+                                        GtkAllocation *alloc,
+                                        gpointer data) {
+    (void)widget; (void)data;
+    if (alloc->height > 1)
+        s_x11_exclusive_zone = alloc->height;
+}
+
 static WindowBackendState *get_backend_state(GtkWindow *window) {
     WindowBackendState *state;
 
@@ -124,6 +140,24 @@ static void sync_x11_window_position(GtkWindow *window) {
         y = geometry.y + geometry.height - height - state->margins[GTK_LAYER_SHELL_EDGE_BOTTOM];
     } else {
         y = geometry.y + state->margins[GTK_LAYER_SHELL_EDGE_TOP];
+    }
+
+    /* ── X11 exclusive-zone emulation ─────────────────────────────────────
+     * For TOP-anchored popup windows, clamp y so the window is never placed
+     * above the panel bar.  This mirrors what the Wayland compositor does
+     * automatically via the layer-shell exclusive-zone mechanism.
+     *
+     * The condition is: this is NOT the panel bar itself (auto_exclusive_zone
+     * = FALSE), it IS anchored to the TOP, and the computed y falls inside
+     * the reserved panel area.  Windows that already carry a large enough TOP
+     * margin (e.g. wifi / battery popups with margin = 32) will have
+     * y >= s_x11_exclusive_zone and skip the clamp.
+     * ────────────────────────────────────────────────────────────────────── */
+    if (!state->auto_exclusive_zone &&
+        state->anchors[GTK_LAYER_SHELL_EDGE_TOP] &&
+        s_x11_exclusive_zone > 0 &&
+        y < geometry.y + s_x11_exclusive_zone) {
+        y = geometry.y + s_x11_exclusive_zone;
     }
 
     gtk_window_move(window, x, y);
@@ -334,5 +368,14 @@ void panel_window_backend_auto_exclusive_zone_enable(GtkWindow *window) {
 
     if (panel_window_backend_is_wayland()) {
         gtk_layer_auto_exclusive_zone_enable(window);
+    } else {
+        /* On X11: track the panel bar's height so popup windows can be
+         * positioned below it (exclusive-zone emulation). */
+        GtkAllocation alloc;
+        gtk_widget_get_allocation(GTK_WIDGET(window), &alloc);
+        if (alloc.height > 1)
+            s_x11_exclusive_zone = alloc.height;
+        g_signal_connect(GTK_WIDGET(window), "size-allocate",
+                         G_CALLBACK(on_x11_panel_size_allocate), NULL);
     }
 }
