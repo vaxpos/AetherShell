@@ -163,7 +163,8 @@ static gboolean wayfire_send_request(const char *json) {
 static void handle_wayfire_keyboard_state(JsonObject *state) {
     JsonArray *layouts;
     int idx;
-    const char *raw;
+    GString *joined;
+    guint i;
 
     if (!state ||
         !json_object_has_member(state, "possible-layouts") ||
@@ -175,11 +176,21 @@ static void handle_wayfire_keyboard_state(JsonObject *state) {
     idx = (int)json_object_get_int_member(state, "layout-index");
     if (!layouts || idx < 0 || idx >= (int)json_array_get_length(layouts)) return;
 
-    raw = json_array_get_string_element(layouts, idx);
-    if (!raw || !raw[0]) return;
+    joined = g_string_new("");
+    for (i = 0; i < json_array_get_length(layouts); i++) {
+        const char *name = json_array_get_string_element(layouts, i);
+        if (!name || !name[0]) continue;
+        if (joined->len > 0) g_string_append_c(joined, '\n');
+        g_string_append(joined, name);
+    }
+    if (joined->len == 0) {
+        g_string_free(joined, TRUE);
+        return;
+    }
 
-    g_strlcpy(s_keyboard_state.layouts, raw, sizeof(s_keyboard_state.layouts));
+    g_strlcpy(s_keyboard_state.layouts, joined->str, sizeof(s_keyboard_state.layouts));
     s_keyboard_state.layout_index = idx;
+    g_string_free(joined, TRUE);
     s_have_keyboard_state = TRUE;
     emit_keyboard_state();
 }
