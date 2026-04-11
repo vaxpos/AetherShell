@@ -558,17 +558,22 @@ void panel_compositor_backend_init(void) {
         return;
     }
 
-    if (xorg_workspaces_init(&s_xorg_workspace_state) || xorg_keyboard_init(&s_xorg_keyboard_state)) {
+    {
+        gboolean have_xorg_workspaces = xorg_workspaces_init(&s_xorg_workspace_state);
+        gboolean have_xorg_keyboard = xorg_keyboard_init(&s_xorg_keyboard_state);
+
+        if (have_xorg_workspaces || have_xorg_keyboard) {
         s_backend = COMPOSITOR_BACKEND_X11;
 
-        if (s_xorg_workspace_state.dpy) {
-            s_xorg_workspace_poll_id = g_timeout_add(150, refresh_xorg_workspaces, NULL);
-            refresh_xorg_workspaces(NULL);
-        }
+            if (have_xorg_workspaces && s_xorg_workspace_state.dpy) {
+                s_xorg_workspace_poll_id = g_timeout_add(150, refresh_xorg_workspaces, NULL);
+                refresh_xorg_workspaces(NULL);
+            }
 
-        if (s_xorg_keyboard_state.xdisplay) {
-            s_xorg_keyboard_poll_id = g_timeout_add(150, refresh_xorg_keyboard, NULL);
-            refresh_xorg_keyboard(NULL);
+            if (have_xorg_keyboard && s_xorg_keyboard_state.xdisplay) {
+                s_xorg_keyboard_poll_id = g_timeout_add(150, refresh_xorg_keyboard, NULL);
+                refresh_xorg_keyboard(NULL);
+            }
         }
     }
 }
