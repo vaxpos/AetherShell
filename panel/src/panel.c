@@ -16,6 +16,7 @@
 #include "sidebar_popup.h"
 #include "notifications_ui.h"
 #include "window_backend.h"
+#include "compositor_backend.h"
 
 static GtkWidget *time_label;
 static const gint PANEL_HEIGHT = 32;
@@ -196,6 +197,7 @@ int main(int argc, char *argv[]) {
     g_setenv("NO_AT_BRIDGE", "1", TRUE);
     gtk_init(&argc, &argv);
     panel_window_backend_detect();
+    panel_compositor_backend_init();
     panel_executable_path = g_file_read_link("/proc/self/exe", NULL);
     if (!panel_executable_path && argc > 0 && argv[0] && argv[0][0] != '\0') {
         panel_executable_path = g_strdup(argv[0]);

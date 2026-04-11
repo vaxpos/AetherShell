@@ -7,7 +7,7 @@ DATADIR ?= $(PREFIX)/share/panel
 RESOURCES_DIR ?= $(DATADIR)/resources
 
 PKGS = gtk+-3.0 gtk-layer-shell-0 libpulse libpulse-mainloop-glib \
-       gio-2.0 json-glib-1.0 dbusmenu-glib-0.4
+       gio-2.0 json-glib-1.0 dbusmenu-glib-0.4 wayland-client
 PKG_CHECK = $(shell pkg-config --exists $(PKGS) && echo yes || echo no)
 ifeq ($(PKG_CHECK),no)
 $(error Missing build dependencies. Install: libgtk-3-dev libgtk-layer-shell-dev libpulse-dev libjson-glib-dev libdbusmenu-glib-dev)
@@ -22,7 +22,8 @@ SRC      = src/panel.c src/control_center_ui.c src/app_menu.c \
            src/workspaces.c src/keyboard_layout.c src/sni_tray.c src/resource_paths.c \
            src/network_actions.c src/brightness_control.c src/volume_indicator.c \
            src/mic_indicator.c src/wifi_indicator.c src/sidebar.c src/notifications_ui.c \
-           src/bluetooth_manager.c src/bt_indicator.c src/window_backend.c
+           src/bluetooth_manager.c src/bt_indicator.c src/window_backend.c \
+           src/compositor_backend.c src/aether-ipc-v1-client-protocol.c
 INCLUDES = -Iinclude
 
 panel: $(SRC)
