@@ -114,6 +114,7 @@ typedef struct {
     gboolean  dragging;
     gint      drag_rx, drag_ry, drag_wx, drag_wy;
     vaxpDesktopAPI *api;
+    guint     timer_id;
 } SysState;
 
 static SysState M;
@@ -689,9 +690,16 @@ static gboolean on_press(GtkWidget *w, GdkEventButton *ev, gpointer d) {
 }
 static gboolean on_motion(GtkWidget *w, GdkEventMotion *ev, gpointer d) {
     if (!M.dragging || !M.api || !M.api->layout_container) return FALSE;
-    gtk_layout_move(GTK_LAYOUT(M.api->layout_container), w,
-        M.drag_wx + (int)(ev->x_root - M.drag_rx),
-        M.drag_wy + (int)(ev->y_root - M.drag_ry));
+    GtkWidget *target = w;
+    while (target && gtk_widget_get_parent(target) != M.api->layout_container) {
+        target = gtk_widget_get_parent(target);
+    }
+    if (target) {
+        printf("TARGET: %s, TARGET PARENT: %p, LAYOUT: %p\n", gtk_widget_get_name(target), gtk_widget_get_parent(target), M.api->layout_container);
+        gtk_layout_move(GTK_LAYOUT(M.api->layout_container), target,
+            M.drag_wx + (int)(ev->x_root - M.drag_rx),
+            M.drag_wy + (int)(ev->y_root - M.drag_ry));
+    }
     return TRUE;
 }
 static gboolean on_release(GtkWidget *w, GdkEventButton *ev, gpointer d) {
@@ -938,9 +946,16 @@ static GtkWidget *create_sysmon_widget(vaxpDesktopAPI *api) {
 
     /* Start updating every 2 seconds */
     update_stats(NULL);
-    g_timeout_add(1000, update_stats, NULL);
+    M.timer_id = g_timeout_add(1000, update_stats, NULL);
 
     return root;
+}
+
+static void destroy_sysmon(void) {
+    if (M.timer_id) {
+        g_source_remove(M.timer_id);
+        M.timer_id = 0;
+    }
 }
 
 /* ══════════════════════════════════════════════
@@ -948,10 +963,11 @@ static GtkWidget *create_sysmon_widget(vaxpDesktopAPI *api) {
    ══════════════════════════════════════════════ */
 vaxpWidgetAPI *vaxp_widget_init(void) {
     static vaxpWidgetAPI api;
-    api.name          = "System Monitor Pro";
-    api.description   = "CPU · RAM · Disk · Temp · Network — live charts";
-    api.author        = "vaxp Community";
-    api.create_widget = create_sysmon_widget;
-    api.update_theme  = set_theme;
+    api.name           = "System Monitor Pro";
+    api.description    = "CPU · RAM · Disk · Temp · Network — live charts";
+    api.author         = "vaxp Community";
+    api.create_widget  = create_sysmon_widget;
+    api.update_theme   = set_theme;
+    api.destroy_widget = destroy_sysmon;
     return &api;
 }

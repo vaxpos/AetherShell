@@ -116,6 +116,7 @@ typedef struct {
     int         widget_sx, widget_sy;
 
     vaxpDesktopAPI *api;
+    guint       timer_id;
 } GpuWidget;
 
 static GpuWidget *g_gw = NULL;
@@ -780,8 +781,13 @@ static gboolean on_motion(GtkWidget *w, GdkEventMotion *ev, gpointer ud) {
         int ny = gw->widget_sy + (int)(ev->y_root - gw->drag_sy);
         if (nx < 0) nx = 0;
         if (ny < 0) ny = 0;
-        gtk_layout_move(GTK_LAYOUT(gw->api->layout_container),
-                        gw->root_eb, nx, ny);
+        GtkWidget *target = gw->root_eb;
+        while (target && gtk_widget_get_parent(target) != gw->api->layout_container) {
+            target = gtk_widget_get_parent(target);
+        }
+        if (target) {
+            gtk_layout_move(GTK_LAYOUT(gw->api->layout_container), target, nx, ny);
+        }
         return TRUE;
     }
     return FALSE;
@@ -981,9 +987,16 @@ static GtkWidget *create_gpu_widget(vaxpDesktopAPI *desktop_api) {
 
     /* Start background poller + GTK tick */
     g_thread_new("gpu-poll", poll_thread, gw);
-    g_timeout_add(UPDATE_MS, on_tick, gw);
+    gw->timer_id = g_timeout_add(UPDATE_MS, on_tick, gw);
 
     return gw->root_eb;
+}
+
+static void destroy_gpu(void) {
+    if (g_gw && g_gw->timer_id) {
+        g_source_remove(g_gw->timer_id);
+        g_gw->timer_id = 0;
+    }
 }
 
 /* ================================================================== */
@@ -991,10 +1004,11 @@ static GtkWidget *create_gpu_widget(vaxpDesktopAPI *desktop_api) {
 /* ================================================================== */
 vaxpWidgetAPI *vaxp_widget_init(void) {
     static vaxpWidgetAPI api;
-    api.name          = "GPU Monitor";
-    api.description   = "Real-time GPU temp, load, VRAM, fan & power — NVIDIA + AMD.";
-    api.author        = "vaxp Community";
-    api.create_widget = create_gpu_widget;
-    api.update_theme  = set_theme;
+    api.name           = "GPU Monitor";
+    api.description    = "Real-time GPU temp, load, VRAM, fan & power — NVIDIA + AMD.";
+    api.author         = "vaxp Community";
+    api.create_widget  = create_gpu_widget;
+    api.update_theme   = set_theme;
+    api.destroy_widget = destroy_gpu;
     return &api;
 }

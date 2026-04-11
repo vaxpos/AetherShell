@@ -80,6 +80,7 @@ typedef struct {
     GtkWidget *btn_next;
     GtkWidget *btn_repeat;
     GtkWidget *vol_slider;
+    guint     timer_id;
 
     gchar    *service;
     gboolean  is_playing;
@@ -561,9 +562,15 @@ static gboolean on_card_press(GtkWidget *w, GdkEventButton *ev, gpointer d) {
 }
 static gboolean on_card_motion(GtkWidget *w, GdkEventMotion *ev, gpointer d) {
     if (!S.dragging || !S.api || !S.api->layout_container) return FALSE;
-    gtk_layout_move(GTK_LAYOUT(S.api->layout_container), w,
-        S.drag_wx + (int)(ev->x_root - S.drag_rx),
-        S.drag_wy + (int)(ev->y_root - S.drag_ry));
+    GtkWidget *target = w;
+    while (target && gtk_widget_get_parent(target) != S.api->layout_container) {
+        target = gtk_widget_get_parent(target);
+    }
+    if (target) {
+        gtk_layout_move(GTK_LAYOUT(S.api->layout_container), target,
+            S.drag_wx + (int)(ev->x_root - S.drag_rx),
+            S.drag_wy + (int)(ev->y_root - S.drag_ry));
+    }
     return TRUE;
 }
 static gboolean on_card_release(GtkWidget *w, GdkEventButton *ev, gpointer d) {
@@ -786,9 +793,16 @@ static GtkWidget *create_mpris_widget(vaxpDesktopAPI *api) {
     gtk_widget_show_all(S.root_eb);
 
     poll_mpris(NULL);
-    g_timeout_add(10, poll_mpris, NULL);
+    S.timer_id = g_timeout_add(2000, poll_mpris, NULL);
 
     return S.root_eb;
+}
+
+static void destroy_mpris(void) {
+    if (S.timer_id) {
+        g_source_remove(S.timer_id);
+        S.timer_id = 0;
+    }
 }
 
 /* ══════════════════════════════════════════════
@@ -796,10 +810,11 @@ static GtkWidget *create_mpris_widget(vaxpDesktopAPI *api) {
    ══════════════════════════════════════════════ */
 vaxpWidgetAPI *vaxp_widget_init(void) {
     static vaxpWidgetAPI api;
-    api.name          = "MPRIS Music Player";
-    api.description   = "MPRIS2 player with PulseAudio master volume control";
-    api.author        = "vaxp Community";
-    api.create_widget = create_mpris_widget;
-    api.update_theme  = set_theme;
+    api.name           = "MPRIS Music Player";
+    api.description    = "MPRIS2 player with PulseAudio master volume control";
+    api.author         = "vaxp Community";
+    api.create_widget  = create_mpris_widget;
+    api.update_theme   = set_theme;
+    api.destroy_widget = destroy_mpris;
     return &api;
 }

@@ -803,8 +803,14 @@ static gboolean on_press(GtkWidget *w, GdkEventButton *e, gpointer _) {
 }
 static gboolean on_motion(GtkWidget *w, GdkEventMotion *e, gpointer _) {
     if(!is_drag||!g_api||!g_api->layout_container) return FALSE;
-    gtk_layout_move(GTK_LAYOUT(g_api->layout_container),w,
-        wsx+(int)(e->x_root-dsx), wsy+(int)(e->y_root-dsy));
+    GtkWidget *target = w;
+    while (target && gtk_widget_get_parent(target) != g_api->layout_container) {
+        target = gtk_widget_get_parent(target);
+    }
+    if (target) {
+        gtk_layout_move(GTK_LAYOUT(g_api->layout_container), target,
+            wsx+(int)(e->x_root-dsx), wsy+(int)(e->y_root-dsy));
+    }
     return TRUE;
 }
 static gboolean on_release(GtkWidget *w, GdkEventButton *e, gpointer _) {
@@ -829,6 +835,8 @@ static GtkWidget* make_sep(void) {
 /* ═══════════════════════════════════════════════════════════════════
    WIDGET FACTORY
    ═══════════════════════════════════════════════════════════════════ */
+static guint t_clock=0, t_sysinfo=0, t_storage=0, t_gauges=0, t_net=0;
+
 static GtkWidget* create_widget(vaxpDesktopAPI *api) {
     g_api = api;
     memset(ul_hist,0,sizeof(ul_hist));
@@ -1047,14 +1055,22 @@ static GtkWidget* create_widget(vaxpDesktopAPI *api) {
     update_storage(NULL);
     update_gauges(NULL);
 
-    g_timeout_add(1000,  update_clock,    NULL);
-    g_timeout_add(60000, refresh_sysinfo, NULL);
-    g_timeout_add(2000,  update_storage,  NULL);
-    g_timeout_add(2000,  update_gauges,   NULL);
-    g_timeout_add(1000,  sample_net,      NULL);
+    t_clock   = g_timeout_add(1000,  update_clock,    NULL);
+    t_sysinfo = g_timeout_add(60000, refresh_sysinfo, NULL);
+    t_storage = g_timeout_add(2000,  update_storage,  NULL);
+    t_gauges  = g_timeout_add(2000,  update_gauges,   NULL);
+    t_net     = g_timeout_add(1000,  sample_net,      NULL);
 
     gtk_widget_show_all(ebox);
     return ebox;
+}
+
+static void destroy_widget(void) {
+    if (t_clock)   { g_source_remove(t_clock);   t_clock = 0; }
+    if (t_sysinfo) { g_source_remove(t_sysinfo); t_sysinfo = 0; }
+    if (t_storage) { g_source_remove(t_storage); t_storage = 0; }
+    if (t_gauges)  { g_source_remove(t_gauges);  t_gauges = 0; }
+    if (t_net)     { g_source_remove(t_net);     t_net = 0; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1062,10 +1078,11 @@ static GtkWidget* create_widget(vaxpDesktopAPI *api) {
    ═══════════════════════════════════════════════════════════════════ */
 vaxpWidgetAPI* vaxp_widget_init(void) {
     static vaxpWidgetAPI api;
-    api.name          = "Sidebar";
-    api.description   = "All-in-one sidebar: clock, calendar, sysinfo, RAM/disk, network, gauges.";
-    api.author        = "vaxp Core";
-    api.create_widget = create_widget;
-    api.update_theme  = set_theme;
+    api.name           = "Sidebar";
+    api.description    = "All-in-one sidebar: clock, calendar, sysinfo, RAM/disk, network, gauges.";
+    api.author         = "vaxp Core";
+    api.create_widget  = create_widget;
+    api.update_theme   = set_theme;
+    api.destroy_widget = destroy_widget;
     return &api;
 }

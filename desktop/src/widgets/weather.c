@@ -272,6 +272,7 @@ typedef struct {
     int drag_sx, drag_sy, widget_sx, widget_sy;
 
     vaxpDesktopAPI *api;
+    guint timer_id;
 } WeatherWidget;
 
 static WeatherWidget *g_ww = NULL;
@@ -682,7 +683,13 @@ static gboolean on_motion(GtkWidget *w, GdkEventMotion *ev, gpointer ud){
     if(ww->dragging&&ww->api&&ww->api->layout_container){
         int nx=ww->widget_sx+(int)(ev->x_root-ww->drag_sx);
         int ny=ww->widget_sy+(int)(ev->y_root-ww->drag_sy);
-        gtk_layout_move(GTK_LAYOUT(ww->api->layout_container),w,nx,ny);
+        GtkWidget *target = w;
+        while (target && gtk_widget_get_parent(target) != ww->api->layout_container) {
+            target = gtk_widget_get_parent(target);
+        }
+        if (target) {
+            gtk_layout_move(GTK_LAYOUT(ww->api->layout_container), target, nx, ny);
+        }
         return TRUE;
     }
     return FALSE;
@@ -958,8 +965,15 @@ static GtkWidget *create_weather_ui(vaxpDesktopAPI *desktop_api) {
     gtk_widget_show_all(ww->root_eb);
 
     start_fetch(ww);
-    g_timeout_add(UPDATE_MS,on_timer,ww);
+    ww->timer_id = g_timeout_add(UPDATE_MS, on_timer, ww);
     return ww->root_eb;
+}
+
+static void destroy_weather(void) {
+    if (g_ww && g_ww->timer_id) {
+        g_source_remove(g_ww->timer_id);
+        g_ww->timer_id = 0;
+    }
 }
 
 /* ================================================================== */
@@ -967,10 +981,11 @@ static GtkWidget *create_weather_ui(vaxpDesktopAPI *desktop_api) {
 /* ================================================================== */
 vaxpWidgetAPI *vaxp_widget_init(void) {
     static vaxpWidgetAPI api;
-    api.name          = "Weather (Advanced)";
-    api.description   = "wttr.in: current + hourly strip + 3-day forecast + temp curve.";
-    api.author        = "vaxp Community";
-    api.create_widget = create_weather_ui;
-    api.update_theme  = set_theme;
+    api.name           = "Weather (Advanced)";
+    api.description    = "wttr.in: current + hourly strip + 3-day forecast + temp curve.";
+    api.author         = "vaxp Community";
+    api.create_widget  = create_weather_ui;
+    api.update_theme   = set_theme;
+    api.destroy_widget = destroy_weather;
     return &api;
 }

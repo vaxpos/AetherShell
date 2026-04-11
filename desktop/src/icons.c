@@ -321,7 +321,7 @@ void refresh_icons(void) {
     for (iter = children; iter != NULL; iter = g_list_next(iter)) {
         GtkWidget *child = GTK_WIDGET(iter->data);
         const gchar *name = gtk_widget_get_name(child);
-        if (g_strcmp0(name, "vaxp-widget") != 0) {
+        if (g_strcmp0(name, "vaxp-widget-slot") != 0 && g_strcmp0(name, "vaxp-widget") != 0) {
             gtk_widget_destroy(child);
         } else {
             apply_widget_visibility(child);

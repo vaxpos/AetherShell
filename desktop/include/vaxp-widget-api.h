@@ -25,6 +25,9 @@ typedef struct {
     
     /* Optional: Called by the Desktop Manager to update the widget's background color. */
     void (*update_theme)(const char *bg_color, double opacity);
+
+    /* Optional: Called before the widget is destroyed. Must stop all internal timers. */
+    void (*destroy_widget)(void);
 } vaxpWidgetAPI;
 
 /* The expected factory symbol used dynamically by the loader. */

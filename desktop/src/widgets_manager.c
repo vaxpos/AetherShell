@@ -18,6 +18,7 @@
 typedef struct {
     void *dl_handle;
     vaxpWidgetAPI *api;
+    GtkWidget *slot;
     GtkWidget *root;
     gboolean enabled;
 } LoadedWidget;
@@ -87,11 +88,41 @@ static void set_widget_enabled(const char *fname, gboolean enabled);
 static gboolean on_widget_toggle_changed(GtkSwitch *sw, gboolean state, gpointer user_data);
 static void show_edit_widgets_dialog(GtkWidget *parent_widget);
 
+static void widget_unload(const char *fname);
+
 static void on_widget_root_destroy(GtkWidget *widget, gpointer user_data) {
     LoadedWidget *w = (LoadedWidget *)user_data;
 
     if (!w) return;
-    if (w->root == widget) w->root = NULL;
+    if (w->root == widget || w->slot == widget) {
+        w->root = NULL;
+        w->slot = NULL;
+    }
+}
+
+static void widget_unload(const char *fname) {
+    LoadedWidget *w = get_loaded_widget(fname);
+    if (!w) return;
+
+    if (w->api && w->api->destroy_widget) {
+        w->api->destroy_widget();
+    }
+
+    if (w->slot && GTK_IS_WIDGET(w->slot)) {
+        gtk_widget_destroy(w->slot);
+    } else if (w->root && GTK_IS_WIDGET(w->root)) {
+        gtk_widget_destroy(w->root);
+    }
+
+    if (w->dl_handle) {
+        dlclose(w->dl_handle);
+        w->dl_handle = NULL;
+    }
+
+    w->api = NULL;
+    w->root = NULL;
+    w->slot = NULL;
+    w->enabled = FALSE;
 }
 
 static void loaded_widget_free(gpointer ptr) {
@@ -184,6 +215,7 @@ void apply_widget_visibility(GtkWidget *root) {
 static gboolean widget_ensure_ui(const char *fname, GtkWidget *layout, gboolean log_errors) {
     LoadedWidget *w;
     GtkWidget *ui;
+    GtkWidget *slot;
     int x = 100;
     int y = 100;
 
@@ -191,28 +223,34 @@ static gboolean widget_ensure_ui(const char *fname, GtkWidget *layout, gboolean 
 
     w = get_loaded_widget(fname);
     if (!w || !w->api) return FALSE;
-    if (w->root) {
-        apply_widget_visibility(w->root);
+    if (w->slot) {
+        apply_widget_visibility(w->slot);
         return TRUE;
     }
 
     ui = w->api->create_widget(&desktop_api);
     if (!ui) return FALSE;
 
+    slot = gtk_event_box_new();
+    gtk_widget_set_app_paintable(slot, TRUE);
+    gtk_container_add(GTK_CONTAINER(slot), ui);
+
     w->root = ui;
+    w->slot = slot;
+    gtk_widget_set_name(slot, "vaxp-widget-slot");
     gtk_widget_set_name(ui, "vaxp-widget");
-    g_object_set_data_full(G_OBJECT(ui), "vaxp-widget-fname", g_strdup(fname), g_free);
-    g_signal_connect(ui, "destroy", G_CALLBACK(on_widget_root_destroy), w);
+    g_object_set_data_full(G_OBJECT(slot), "vaxp-widget-fname", g_strdup(fname), g_free);
+    g_signal_connect(slot, "destroy", G_CALLBACK(on_widget_root_destroy), w);
 
     get_item_position(fname, &x, &y);
-    gtk_layout_put(GTK_LAYOUT(layout), ui, x, y);
-    gtk_widget_show_all(ui);
+    gtk_layout_put(GTK_LAYOUT(layout), slot, x, y);
+    gtk_widget_show_all(slot);
 
     g_print("[Widgets] Successfully loaded '%s' V1.0 by %s\n",
             w->api->name ? w->api->name : fname,
             w->api->author ? w->api->author : "Unknown");
 
-    apply_widget_visibility(ui);
+    apply_widget_visibility(slot);
     return TRUE;
 }
 
@@ -345,8 +383,8 @@ void reload_widgets(void) {
         w->enabled = is_widget_enabled(fname);
         if (w->enabled) {
             widget_ensure_ui(fname, icon_layout, TRUE);
-        } else if (w->root) {
-            gtk_widget_hide(w->root);
+        } else {
+            widget_unload(fname);
         }
     }
     g_dir_close(dir);
@@ -356,9 +394,9 @@ void reload_widgets(void) {
         const char *loaded_fname = (const char *)key;
         LoadedWidget *w = (LoadedWidget *)value;
         w->enabled = is_widget_enabled(loaded_fname);
-        if (w->root) {
-            apply_widget_visibility(w->root);
-            if (w->enabled && w->api && w->api->update_theme) {
+        if (w->enabled && w->slot) {
+            apply_widget_visibility(w->slot);
+            if (w->api && w->api->update_theme) {
                 w->api->update_theme(current_widget_bg_color, current_widget_bg_opacity);
             }
         }
@@ -388,7 +426,15 @@ void on_mode_widgets(GtkWidget *item, gpointer data) {
 
 static gboolean on_widget_toggle_changed(GtkSwitch *sw, gboolean state, gpointer user_data) {
     (void)sw;
-    set_widget_enabled((const char *)user_data, state);
+    const char *fname = (const char *)user_data;
+    set_widget_enabled(fname, state);
+    
+    if (!state) {
+        widget_unload(fname);
+    } else {
+        widget_ensure_ui(fname, icon_layout, TRUE);
+    }
+    
     return FALSE;
 }
 
