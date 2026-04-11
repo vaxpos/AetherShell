@@ -2,6 +2,10 @@
 #ifdef GDK_WINDOWING_WAYLAND
 #include <gdk/gdkwayland.h>
 #endif
+#ifdef GDK_WINDOWING_X11
+#include <gdk/gdkx.h>
+#include <X11/Xlib.h>
+#endif
 
 typedef struct {
     gboolean anchors[4];
@@ -125,7 +129,7 @@ static void sync_x11_window_position(GtkWindow *window) {
     gtk_window_move(window, x, y);
 }
 
-/* ─── Phase 1-B: deferred single-shot repositioning ─────────────────── */
+/* ─── Deferred single-shot repositioning ────────────────────────────── */
 
 static gboolean reposition_idle_cb(gpointer data) {
     GtkWindow *window = GTK_WINDOW(data);
@@ -136,10 +140,6 @@ static gboolean reposition_idle_cb(gpointer data) {
     return G_SOURCE_REMOVE;
 }
 
-/**
- * Schedule a single repositioning pass on the next idle cycle.
- * Multiple calls before the idle fires are collapsed into one.
- */
 static void schedule_x11_reposition(GtkWindow *window) {
     WindowBackendState *state = get_backend_state(window);
 
@@ -147,7 +147,7 @@ static void schedule_x11_reposition(GtkWindow *window) {
     state->reposition_idle_id = g_idle_add(reposition_idle_cb, window);
 }
 
-/* Cancel pending idle when the window is destroyed (Phase 1-D). */
+/* Cancel pending idle on window destruction to prevent use-after-free. */
 static void on_backend_window_destroy(GtkWidget *widget, gpointer user_data) {
     WindowBackendState *state;
 
@@ -160,7 +160,7 @@ static void on_backend_window_destroy(GtkWidget *widget, gpointer user_data) {
     }
 }
 
-/* ─── Phase 1-A: realize-only sync (configure-event handler removed) ─── */
+/* ─── Panel bar: realize handler (standard WM-managed DOCK window) ───── */
 
 static void on_backend_window_realize(GtkWidget *widget, gpointer user_data) {
     (void)user_data;
@@ -169,8 +169,51 @@ static void on_backend_window_realize(GtkWidget *widget, gpointer user_data) {
     sync_x11_window_position(GTK_WINDOW(widget));
 }
 
-/* ─── Phase 1-C: GDK_HINT_POS tells the WM the position is intentional ─ */
+/* ─── Popup windows: override_redirect bypass + position sync ─────────
+ *
+ * override_redirect = True instructs the X11 server to skip the window
+ * manager entirely for this window.  This means:
+ *   • No WM decorations added (even if gtk_window_set_decorated is ignored)
+ *   • No WM repositioning after gtk_window_move()
+ *   • Window stacks above every normal & managed window automatically
+ *
+ * We apply it at realize time, before the window is mapped (made visible),
+ * so the attribute is in effect for the very first XMapWindow call.
+ *
+ * Mouse input works without any extra work.  Keyboard input is obtained
+ * naturally when the user clicks inside the popup (X11 sends Enter/focus
+ * events to override_redirect windows on pointer-click).
+ * ──────────────────────────────────────────────────────────────────── */
 
+static void on_popup_window_realize(GtkWidget *widget, gpointer user_data) {
+    (void)user_data;
+
+    if (panel_window_backend_is_wayland()) return;
+
+#ifdef GDK_WINDOWING_X11
+    {
+        GdkWindow *gdk_win = gtk_widget_get_window(widget);
+        if (gdk_win && GDK_IS_X11_WINDOW(gdk_win)) {
+            Display *xdpy  = GDK_DISPLAY_XDISPLAY(gdk_display_get_default());
+            Window   xwin  = GDK_WINDOW_XID(gdk_win);
+            XSetWindowAttributes attrs;
+
+            attrs.override_redirect = True;
+            XChangeWindowAttributes(xdpy, xwin, CWOverrideRedirect, &attrs);
+
+            /* Flush to the X server so the attribute is applied before
+             * GTK issues XMapWindow (which happens right after realize). */
+            XFlush(xdpy);
+        }
+    }
+#endif
+
+    sync_x11_window_position(GTK_WINDOW(widget));
+}
+
+/* ─── init helpers ────────────────────────────────────────────────────── */
+
+/* Used for the panel bar (DOCK). WM manages it normally. */
 static void init_x11_window(GtkWindow *window) {
     GdkGeometry geo;
 
@@ -179,16 +222,37 @@ static void init_x11_window(GtkWindow *window) {
     gtk_window_set_keep_above(window, TRUE);
     gtk_window_stick(window);
 
-    /* Tell the WM not to relocate this window on its own. */
     geo.min_width  = 0;
     geo.min_height = 0;
     gtk_window_set_geometry_hints(window, NULL, &geo, GDK_HINT_POS);
 
-    /* Only realize is needed; configure-event caused an infinite feedback
-     * loop on X11 (move → configure → move → …). */
     g_signal_connect(window, "realize", G_CALLBACK(on_backend_window_realize), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(on_backend_window_destroy), NULL);
 }
+
+/* Used for ALL popup windows (control center, sidebar, app menu, …).
+ * Sets override_redirect so the WM never touches position or decoration. */
+static void init_x11_popup_window(GtkWindow *window) {
+    GdkGeometry geo;
+
+    /* Keep these hints as a courtesy to WMs that peek at override_redirect
+     * windows (some compositors still read them). */
+    gtk_window_set_skip_taskbar_hint(window, TRUE);
+    gtk_window_set_skip_pager_hint(window, TRUE);
+    gtk_window_set_keep_above(window, TRUE);
+    gtk_window_stick(window);
+
+    geo.min_width  = 0;
+    geo.min_height = 0;
+    gtk_window_set_geometry_hints(window, NULL, &geo, GDK_HINT_POS);
+
+    /* on_popup_window_realize sets override_redirect BEFORE the window is
+     * mapped, then calls sync_x11_window_position. */
+    g_signal_connect(window, "realize", G_CALLBACK(on_popup_window_realize), NULL);
+    g_signal_connect(window, "destroy", G_CALLBACK(on_backend_window_destroy), NULL);
+}
+
+/* ─── Public API ─────────────────────────────────────────────────────── */
 
 void panel_window_backend_init_panel(GtkWindow *window, const char *namespace_name) {
     if (!window) return;
@@ -199,6 +263,7 @@ void panel_window_backend_init_panel(GtkWindow *window, const char *namespace_na
         gtk_layer_set_layer(window, GTK_LAYER_SHELL_LAYER_TOP);
         gtk_layer_set_keyboard_mode(window, GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
     } else {
+        /* Panel bar: standard DOCK window managed by the WM. */
         init_x11_window(window);
     }
 }
@@ -217,7 +282,8 @@ void panel_window_backend_init_popup(GtkWindow *window,
         gtk_layer_set_layer(window, GTK_LAYER_SHELL_LAYER_TOP);
         gtk_layer_set_keyboard_mode(window, keyboard_mode);
     } else {
-        init_x11_window(window);
+        /* Popup windows: override_redirect — WM never touches them. */
+        init_x11_popup_window(window);
     }
 }
 
@@ -235,7 +301,6 @@ void panel_window_backend_set_anchor(GtkWindow *window,
     if (panel_window_backend_is_wayland()) {
         gtk_layer_set_anchor(window, edge, anchor_to_edge);
     } else {
-        /* Phase 1-B: schedule deferred repositioning instead of syncing now. */
         schedule_x11_reposition(window);
     }
 }
@@ -254,7 +319,6 @@ void panel_window_backend_set_margin(GtkWindow *window,
     if (panel_window_backend_is_wayland()) {
         gtk_layer_set_margin(window, edge, margin);
     } else {
-        /* Phase 1-B: schedule deferred repositioning instead of syncing now. */
         schedule_x11_reposition(window);
     }
 }
