@@ -5,12 +5,8 @@
 #include <gdk/gdkwayland.h>
 #endif
 #include <time.h>
+#include "notify_ui.h"
 
-// --- إعدادات التصميم الأساسية ---
-#define NOTIFY_WIDTH 340
-#define MARGIN_X 20
-#define MARGIN_Y 50
-#define SPACING 10
 #define DEFAULT_TIMEOUT 5000
 #define MAX_HISTORY 50
 
@@ -23,24 +19,6 @@ typedef struct {
     char *body;
     gint64 timestamp;
 } NotificationItem;
-
-// --- هيكل النافذة النشطة ---
-typedef struct {
-    guint32 id;
-    char *app_name;
-    char *icon_path;
-    GtkWidget *icon_img;
-    GtkWidget *title_lbl;
-    GtkWidget *body_lbl;
-    GtkWidget *win;
-    guint timeout_source;
-} VenomNotification;
-
-// --- هيكل بيانات الأزرار ---
-typedef struct {
-    guint32 notification_id;
-    char *action_key;
-} ActionData;
 
 GList *active_notifications = NULL;
 GList *history_list = NULL;
@@ -93,11 +71,9 @@ void add_to_history(guint32 id, const char *app, const char *icon, const char *s
 void clear_history();
 static NotificationItem *find_history_item_by_id(guint32 id);
 static VenomNotification *find_active_notification_by_id(guint32 id);
-static void update_notification_icon(GtkWidget *image, const char *icon);
-static void update_notification_content(VenomNotification *notification, const char *icon, const char *summary, const char *body);
+static void on_ui_action(guint32 id, const char *action_key, gpointer user_data);
 static guint32 create_new_notification(const char *app_name, guint32 replaces_id, const char *summary, const char *body, const char *icon, GVariant *actions, gint timeout);
 static gboolean notify_is_wayland_session(void);
-static gboolean draw_notification_background(GtkWidget *widget, cairo_t *cr, gpointer data);
 
 // --- إدارة السجل (History Logic) ---
 
@@ -174,46 +150,6 @@ void emit_history_updated_signal(GDBusConnection *connection) {
                                   NULL, NULL);
 }
 
-// --- إدارة الـ CSS (التصميم) ---
-void load_css() {
-    GtkCssProvider *provider = gtk_css_provider_new();
-    const gchar *css = 
-        "window.venom-notify {"
-        "   background-color: rgba(0, 0, 0, 0.392);"
-        "   background: rgba(0, 0, 0, 0.392);;"
-        "   border: 1.5px solid rgba(0, 255, 255, 0.8);"
-        "   border-radius: 8px;"
-        "}"
-        "label.notify-title {"
-        "   color: #00FFFF;"
-        "   font-weight: bold;"
-        "   font-size: 11pt;"
-        "}"
-        "label.notify-body {"
-        "   color: #EEEEEE;"
-        "   font-size: 10pt;"
-        "}"
-        "button {"
-        "   background-color: #222222;"
-        "   color: #00FFFF;"
-        "   border: 1px solid #00FFFF;"
-        "   border-radius: 4px;"
-        "   padding: 4px;"
-        "}"
-        "button:hover {"
-        "   background-color: #00FFFF;"
-        "   color: #000000;"
-        "}";
-    gtk_css_provider_load_from_data(provider, css, -1, NULL);
-    GdkScreen *screen = gdk_screen_get_default();
-    if (screen) {
-        gtk_style_context_add_provider_for_screen(screen,
-                                                  GTK_STYLE_PROVIDER(provider),
-                                                  GTK_STYLE_PROVIDER_PRIORITY_APPLICATION);
-    }
-    g_object_unref(provider);
-}
-
 static gboolean notify_is_wayland_session(void) {
 #if defined(GDK_WINDOWING_WAYLAND)
     return GDK_IS_WAYLAND_DISPLAY(gdk_display_get_default());
@@ -222,88 +158,14 @@ static gboolean notify_is_wayland_session(void) {
 #endif
 }
 
-static gboolean draw_notification_background(GtkWidget *widget, cairo_t *cr, gpointer data) {
-    (void)data;
-    gint width = gtk_widget_get_allocated_width(widget);
-    gint height = gtk_widget_get_allocated_height(widget);
-    const double radius = 8.0;
-
-    if (width <= 0 || height <= 0) {
-        return FALSE;
-    }
-
-    cairo_set_operator(cr, CAIRO_OPERATOR_SOURCE);
-    cairo_set_source_rgba(cr, 0, 0, 0, 0);
-    cairo_paint(cr);
-    cairo_set_operator(cr, CAIRO_OPERATOR_OVER);
-
-    cairo_new_path(cr);
-    cairo_arc(cr, width - radius, radius, radius, -G_PI / 2.0, 0);
-    cairo_arc(cr, width - radius, height - radius, radius, 0, G_PI / 2.0);
-    cairo_arc(cr, radius, height - radius, radius, G_PI / 2.0, G_PI);
-    cairo_arc(cr, radius, radius, radius, G_PI, 3.0 * G_PI / 2.0);
-    cairo_close_path(cr);
-
-    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.392);
-    cairo_fill_preserve(cr);
-
-    cairo_set_source_rgba(cr, 0.0, 0.0, 0.0, 0.392);
-    cairo_set_line_width(cr, 1.5);
-    cairo_stroke(cr);
-
-    return FALSE;
-}
-
-// --- معالجة أحداث الأزرار (Actions) ---
-void on_action_clicked(GtkButton *button, gpointer user_data) {
-    (void)button;
-    ActionData *data = (ActionData *)user_data;
+static void on_ui_action(guint32 id, const char *action_key, gpointer user_data) {
+    (void)user_data;
     if (dbus_connection) {
         g_dbus_connection_emit_signal(dbus_connection, NULL, "/org/freedesktop/Notifications",
                                       "org.freedesktop.Notifications", "ActionInvoked",
-                                      g_variant_new("(us)", data->notification_id, data->action_key), NULL);
+                                      g_variant_new("(us)", id, action_key), NULL);
     }
-    close_notification(data->notification_id, 2); // 2 = Dismissed by user
-}
-
-void free_action_data(gpointer data, GClosure *closure) {
-    (void)closure;
-    ActionData *action_data = (ActionData *)data;
-    g_free(action_data->action_key);
-    g_free(action_data);
-}
-
-// --- إعادة تموضع النوافذ ---
-void reposition_notifications() {
-    int count = 0;
-    GdkRectangle workarea = {0};
-    GdkDisplay *display = gdk_display_get_default();
-    GdkMonitor *monitor = display ? gdk_display_get_primary_monitor(display) : NULL;
-    if (monitor) {
-        gdk_monitor_get_workarea(monitor, &workarea);
-    }
-
-    for (GList *l = active_notifications; l != NULL; l = l->next) {
-        VenomNotification *n = (VenomNotification *)l->data;
-        gint width = NOTIFY_WIDTH;
-        gint height = 0;
-        gtk_window_get_size(GTK_WINDOW(n->win), &width, &height);
-        if (height <= 0) {
-            GtkRequisition min_req;
-            gtk_widget_get_preferred_size(n->win, &min_req, NULL);
-            height = min_req.height;
-        }
-
-        int y = MARGIN_Y + (count * (height + SPACING));
-        if (notify_use_layer_shell) {
-            gtk_layer_set_margin(GTK_WINDOW(n->win), GTK_LAYER_SHELL_EDGE_TOP, y);
-            gtk_layer_set_margin(GTK_WINDOW(n->win), GTK_LAYER_SHELL_EDGE_RIGHT, MARGIN_X);
-        } else {
-            int x = workarea.width - width - MARGIN_X;
-            gtk_window_move(GTK_WINDOW(n->win), x, y);
-        }
-        count++;
-    }
+    close_notification(id, 2); // 2 = Dismissed by user
 }
 
 gboolean on_timeout(gpointer data) {
@@ -318,12 +180,12 @@ void close_notification(guint32 id, guint reason) {
         if (n->id == id) {
             if (n->timeout_source > 0) g_source_remove(n->timeout_source);
             
-            gtk_widget_destroy(n->win);
+            notify_ui_destroy(n);
             active_notifications = g_list_delete_link(active_notifications, l);
             g_free(n->app_name);
             g_free(n->icon_path);
             g_free(n);
-            reposition_notifications();
+            notify_ui_reposition(active_notifications, notify_use_layer_shell);
             
             // إرسال إشارة الإغلاق
             if (dbus_connection) {
@@ -334,62 +196,6 @@ void close_notification(guint32 id, guint reason) {
             break;
         }
     }
-}
-
-static void update_notification_icon(GtkWidget *image, const char *icon) {
-    if (!GTK_IS_IMAGE(image)) {
-        return;
-    }
-
-    if (icon && strlen(icon) > 0) {
-        if (g_path_is_absolute(icon) || g_file_test(icon, G_FILE_TEST_EXISTS)) {
-            GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(icon, 48, 48, TRUE, NULL);
-            if (pixbuf) {
-                gtk_image_set_from_pixbuf(GTK_IMAGE(image), pixbuf);
-                g_object_unref(pixbuf);
-                return;
-            }
-        } else {
-            gtk_image_set_from_icon_name(GTK_IMAGE(image), icon, GTK_ICON_SIZE_DIALOG);
-            gtk_image_set_pixel_size(GTK_IMAGE(image), 48);
-            return;
-        }
-    }
-
-    gtk_image_set_from_icon_name(GTK_IMAGE(image), "dialog-information", GTK_ICON_SIZE_DIALOG);
-    gtk_image_set_pixel_size(GTK_IMAGE(image), 48);
-}
-
-static void update_notification_content(VenomNotification *notification, const char *icon, const char *summary, const char *body) {
-    if (!notification) {
-        return;
-    }
-
-    g_free(notification->icon_path);
-    notification->icon_path = g_strdup(icon);
-    update_notification_icon(notification->icon_img, icon);
-
-    gtk_label_set_text(GTK_LABEL(notification->title_lbl), summary ? summary : "");
-
-    if (notification->body_lbl) {
-        if (body && strlen(body) > 0) {
-            GError *error = NULL;
-            if (pango_parse_markup(body, -1, 0, NULL, NULL, NULL, &error)) {
-                gtk_label_set_markup(GTK_LABEL(notification->body_lbl), body);
-            } else {
-                gtk_label_set_text(GTK_LABEL(notification->body_lbl), body);
-                g_clear_error(&error);
-            }
-            gtk_widget_show(notification->body_lbl);
-        } else {
-            gtk_label_set_text(GTK_LABEL(notification->body_lbl), "");
-            gtk_widget_hide(notification->body_lbl);
-        }
-    }
-
-    gtk_widget_show_all(notification->win);
-    gtk_window_resize(GTK_WINDOW(notification->win), NOTIFY_WIDTH, 1);
-    reposition_notifications();
 }
 
 // --- إنشاء الإشعار وعرضه ---
@@ -434,7 +240,10 @@ static guint32 create_new_notification(const char *app_name, guint32 replaces_id
 
         g_free(existing_notification->app_name);
         existing_notification->app_name = g_strdup(app_name);
-        update_notification_content(existing_notification, icon, summary, body);
+        g_free(existing_notification->icon_path);
+        existing_notification->icon_path = g_strdup(icon);
+        notify_ui_update_content(existing_notification, summary, body, icon);
+        notify_ui_reposition(active_notifications, notify_use_layer_shell);
 
         if (existing_notification->timeout_source > 0) {
             g_source_remove(existing_notification->timeout_source);
@@ -450,143 +259,14 @@ static guint32 create_new_notification(const char *app_name, guint32 replaces_id
     n->app_name = g_strdup(app_name);
     n->icon_path = g_strdup(icon);
 
-    // إنشاء النافذة
-    n->win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
-    gtk_window_set_decorated(GTK_WINDOW(n->win), FALSE);
-    gtk_window_set_keep_above(GTK_WINDOW(n->win), TRUE);
-    gtk_window_set_accept_focus(GTK_WINDOW(n->win), FALSE);
-    gtk_window_set_resizable(GTK_WINDOW(n->win), FALSE);
-    gtk_window_set_type_hint(GTK_WINDOW(n->win), GDK_WINDOW_TYPE_HINT_NOTIFICATION);
-    gtk_window_set_default_size(GTK_WINDOW(n->win), NOTIFY_WIDTH, -1);
-    gtk_widget_set_app_paintable(n->win, TRUE);
-    gtk_widget_set_size_request(n->win, NOTIFY_WIDTH, -1);
-
-    if (notify_use_layer_shell) {
-        gtk_layer_init_for_window(GTK_WINDOW(n->win));
-        gtk_layer_set_namespace(GTK_WINDOW(n->win), "venom-notify");
-        gtk_layer_set_layer(GTK_WINDOW(n->win), GTK_LAYER_SHELL_LAYER_TOP);
-        gtk_layer_set_keyboard_mode(GTK_WINDOW(n->win), GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
-        gtk_layer_set_anchor(GTK_WINDOW(n->win), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
-        gtk_layer_set_anchor(GTK_WINDOW(n->win), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
-    }
-    
-    // تفعيل الشفافية
-    GdkScreen *screen = gtk_widget_get_screen(n->win);
-    GdkVisual *visual = gdk_screen_get_rgba_visual(screen);
-    if (visual) gtk_widget_set_visual(n->win, visual);
-    
-    // ربط CSS بالنافذة
-    GtkStyleContext *context = gtk_widget_get_style_context(n->win);
-    gtk_style_context_add_class(context, "venom-notify");
-
-    // تخطيط العناصر
-    GtkWidget *panel_surface = gtk_event_box_new();
-    GtkWidget *main_hbox = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 12);
-    gtk_widget_set_app_paintable(panel_surface, TRUE);
-    g_signal_connect(panel_surface, "draw", G_CALLBACK(draw_notification_background), NULL);
-    gtk_container_set_border_width(GTK_CONTAINER(main_hbox), 12);
-    gtk_widget_set_size_request(main_hbox, NOTIFY_WIDTH, -1);
-    gtk_container_add(GTK_CONTAINER(panel_surface), main_hbox);
-    gtk_container_add(GTK_CONTAINER(n->win), panel_surface);
-
-    // 1. الأيقونة
-    GtkWidget *icon_img = NULL;
-    if (icon && strlen(icon) > 0) {
-        if (g_path_is_absolute(icon) || g_file_test(icon, G_FILE_TEST_EXISTS)) {
-            GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(icon, 48, 48, TRUE, NULL);
-            if (pixbuf) {
-                icon_img = gtk_image_new_from_pixbuf(pixbuf);
-                g_object_unref(pixbuf);
-            }
-        } else {
-            icon_img = gtk_image_new_from_icon_name(icon, GTK_ICON_SIZE_DIALOG);
-            gtk_image_set_pixel_size(GTK_IMAGE(icon_img), 48);
-        }
-    }
-    if (!icon_img) icon_img = gtk_image_new_from_icon_name("dialog-information", GTK_ICON_SIZE_DIALOG);
-    n->icon_img = icon_img;
-    
-    gtk_box_pack_start(GTK_BOX(main_hbox), icon_img, FALSE, FALSE, 0);
-    gtk_widget_set_valign(icon_img, GTK_ALIGN_START);
-
-    // 2. صندوق النصوص والأزرار
-    GtkWidget *vbox = gtk_box_new(GTK_ORIENTATION_VERTICAL, 6);
-    gtk_widget_set_size_request(vbox, NOTIFY_WIDTH - 96, -1);
-    gtk_box_pack_start(GTK_BOX(main_hbox), vbox, TRUE, TRUE, 0);
-
-    // العنوان
-    GtkWidget *title_lbl = gtk_label_new(summary);
-    n->title_lbl = title_lbl;
-    gtk_label_set_xalign(GTK_LABEL(title_lbl), 0.0);
-    gtk_label_set_line_wrap(GTK_LABEL(title_lbl), TRUE);
-    gtk_label_set_line_wrap_mode(GTK_LABEL(title_lbl), PANGO_WRAP_WORD_CHAR);
-    gtk_label_set_max_width_chars(GTK_LABEL(title_lbl), 32);
-    gtk_style_context_add_class(gtk_widget_get_style_context(title_lbl), "notify-title");
-    gtk_box_pack_start(GTK_BOX(vbox), title_lbl, FALSE, FALSE, 0);
-
-    // المحتوى
-    GtkWidget *body_lbl = gtk_label_new(NULL);
-    n->body_lbl = body_lbl;
-    if (body && strlen(body) > 0) {
-        // تفعيل قراءة وسوم Pango (مثل البولد والروابط) التي ترسلها بعض التطبيقات
-        // التحقق مما إذا كان النص يحتوي على وسوم صالحة
-        GError *error = NULL;
-        if (pango_parse_markup(body, -1, 0, NULL, NULL, NULL, &error)) {
-            // التنسيق سليم، اعرضه مع دعم الخط العريض والروابط
-            gtk_label_set_markup(GTK_LABEL(body_lbl), body);
-        } else {
-            // التنسيق مكسور (يحتوي رموز مثل < أو &)، تراجع واعرضه كنص عادي
-            gtk_label_set_text(GTK_LABEL(body_lbl), body);
-            g_clear_error(&error);
-        }
-        gtk_label_set_xalign(GTK_LABEL(body_lbl), 0.0);
-        gtk_label_set_line_wrap(GTK_LABEL(body_lbl), TRUE);
-        gtk_label_set_line_wrap_mode(GTK_LABEL(body_lbl), PANGO_WRAP_WORD_CHAR);
-        gtk_label_set_max_width_chars(GTK_LABEL(body_lbl), 32);
-    } else {
-        gtk_widget_hide(body_lbl);
-    }
-    gtk_style_context_add_class(gtk_widget_get_style_context(body_lbl), "notify-body");
-    gtk_box_pack_start(GTK_BOX(vbox), body_lbl, FALSE, FALSE, 0);
-
-    // 3. الأزرار (Actions)
-    if (actions && g_variant_n_children(actions) > 0) {
-        GtkWidget *btn_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 6);
-        gtk_box_pack_start(GTK_BOX(vbox), btn_box, FALSE, FALSE, 4);
-
-        GVariantIter iter;
-        gchar *action_key, *action_label;
-        g_variant_iter_init(&iter, actions);
-        
-        while (g_variant_iter_next(&iter, "s", &action_key) && g_variant_iter_next(&iter, "s", &action_label)) {
-            // تجاهل زر الـ default (هو عادة مخصص للنقر على مساحة الإشعار نفسها)
-            if (g_strcmp0(action_key, "default") == 0) {
-                g_free(action_key); g_free(action_label);
-                continue;
-            }
-
-            GtkWidget *btn = gtk_button_new_with_label(action_label);
-            gtk_box_pack_end(GTK_BOX(btn_box), btn, FALSE, FALSE, 0);
-
-            ActionData *data = g_new0(ActionData, 1);
-            data->notification_id = n->id;
-            data->action_key = g_strdup(action_key);
-
-            g_signal_connect_data(btn, "clicked", G_CALLBACK(on_action_clicked), data, free_action_data, 0);
-            
-            g_free(action_key); g_free(action_label);
-        }
-    }
-
-    gtk_widget_show_all(n->win);
-    gtk_window_resize(GTK_WINDOW(n->win), NOTIFY_WIDTH, 1);
+    notify_ui_setup_window(n, summary, body, icon, actions, notify_use_layer_shell, on_ui_action, NULL);
     
     active_notifications = g_list_append(active_notifications, n);
     
     // إضافة الإشعار للسجل
     add_to_history(n->id, app_name, icon, summary, body);
     
-    reposition_notifications();
+    notify_ui_reposition(active_notifications, notify_use_layer_shell);
     
     // إرسال إشارة تحديث السجل
     emit_history_updated_signal(NULL);
@@ -708,7 +388,7 @@ static void on_bus_acquired(GDBusConnection *connection, const gchar *name, gpoi
 
 void notify_init(void) {
     notify_use_layer_shell = notify_is_wayland_session() && gtk_layer_is_supported();
-    load_css(); // تحميل الاستايل
+    notify_ui_init(); // تحميل الاستايل
 
     g_bus_own_name(G_BUS_TYPE_SESSION, "org.freedesktop.Notifications",
                    G_BUS_NAME_OWNER_FLAGS_REPLACE, on_bus_acquired, NULL, NULL, NULL, NULL);

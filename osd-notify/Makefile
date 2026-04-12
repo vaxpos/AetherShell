@@ -5,13 +5,13 @@ BINDIR  ?= $(PREFIX)/bin
 USER_UNIT_DIR ?= $(PREFIX)/lib/systemd/user
 
 
-CFLAGS  = -Wall -Wextra -O2 -Isrc \
+CFLAGS  = -Wall -Wextra -O2 -Isrc -Iinclude \
           $(shell pkg-config --cflags gtk+-3.0 glib-2.0 gio-2.0 gio-unix-2.0 \
             json-glib-1.0 xkbregistry gtk-layer-shell-0 wayland-client \
-            libpulse libpulse-mainloop-glib) -g
+            libpulse libpulse-mainloop-glib x11) -g
 LDFLAGS = $(shell pkg-config --libs gtk+-3.0 glib-2.0 gio-2.0 gio-unix-2.0 \
             json-glib-1.0 xkbregistry gtk-layer-shell-0 wayland-client \
-            libpulse libpulse-mainloop-glib) -lm -lpthread
+            libpulse libpulse-mainloop-glib x11) -lm -lpthread
 
 SRC_DIR = src
 OBJ_DIR = build
