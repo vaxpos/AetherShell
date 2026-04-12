@@ -27,6 +27,11 @@ typedef struct {
 // --- هيكل النافذة النشطة ---
 typedef struct {
     guint32 id;
+    char *app_name;
+    char *icon_path;
+    GtkWidget *icon_img;
+    GtkWidget *title_lbl;
+    GtkWidget *body_lbl;
     GtkWidget *win;
     guint timeout_source;
 } VenomNotification;
@@ -41,7 +46,6 @@ GList *active_notifications = NULL;
 GList *history_list = NULL;
 guint32 id_counter = 1;
 gboolean do_not_disturb = FALSE;
-GHashTable *app_notification_map = NULL;
 GDBusConnection *dbus_connection = NULL;
 gboolean notify_use_layer_shell = FALSE;
 
@@ -87,30 +91,15 @@ void close_notification(guint32 id, guint reason);
 void emit_history_updated_signal(GDBusConnection *connection);
 void add_to_history(guint32 id, const char *app, const char *icon, const char *summary, const char *body);
 void clear_history();
-void replace_in_history(const char *app, const char *icon, const char *summary, const char *body);
+static NotificationItem *find_history_item_by_id(guint32 id);
+static VenomNotification *find_active_notification_by_id(guint32 id);
+static void update_notification_icon(GtkWidget *image, const char *icon);
+static void update_notification_content(VenomNotification *notification, const char *icon, const char *summary, const char *body);
+static guint32 create_new_notification(const char *app_name, guint32 replaces_id, const char *summary, const char *body, const char *icon, GVariant *actions, gint timeout);
 static gboolean notify_is_wayland_session(void);
 static gboolean draw_notification_background(GtkWidget *widget, cairo_t *cr, gpointer data);
 
 // --- إدارة السجل (History Logic) ---
-
-// استبدال إشعار في السجل بدلاً من إضافة واحد جديد
-void replace_in_history(const char *app, const char *icon, const char *summary, const char *body) {
-    // البحث عن آخر إشعار من نفس التطبيق
-    for (GList *l = history_list; l != NULL; l = l->next) {
-        NotificationItem *item = (NotificationItem *)l->data;
-        if (g_strcmp0(item->app_name, app) == 0) {
-            // تحديث الإشعار بدلاً من حذفه
-            g_free(item->summary);
-            g_free(item->body);
-            item->summary = g_strdup(summary);
-            item->body = g_strdup(body);
-            item->timestamp = time(NULL);
-            return;
-        }
-    }
-    // إذا لم نجد واحداً، أضف واحداً جديداً
-    add_to_history(0, app, icon, summary, body);
-}
 
 void add_to_history(guint32 id, const char *app, const char *icon, const char *summary, const char *body) {
     NotificationItem *item = g_new0(NotificationItem, 1);
@@ -149,12 +138,26 @@ void clear_history() {
     }
     g_list_free(history_list);
     history_list = NULL;
-    
-    // تنظيف الخريطة أيضاً
-    if (app_notification_map) {
-        g_hash_table_destroy(app_notification_map);
-        app_notification_map = NULL;
+}
+
+static NotificationItem *find_history_item_by_id(guint32 id) {
+    for (GList *l = history_list; l != NULL; l = l->next) {
+        NotificationItem *item = (NotificationItem *)l->data;
+        if (item->id == id) {
+            return item;
+        }
     }
+    return NULL;
+}
+
+static VenomNotification *find_active_notification_by_id(guint32 id) {
+    for (GList *l = active_notifications; l != NULL; l = l->next) {
+        VenomNotification *notification = (VenomNotification *)l->data;
+        if (notification->id == id) {
+            return notification;
+        }
+    }
+    return NULL;
 }
 
 // دالة مساعدة لإرسال إشارة "تحديث السجل"
@@ -317,19 +320,8 @@ void close_notification(guint32 id, guint reason) {
             
             gtk_widget_destroy(n->win);
             active_notifications = g_list_delete_link(active_notifications, l);
-            
-            // تنظيف من الخريطة
-            if (app_notification_map) {
-                GHashTableIter iter;
-                gpointer key, value;
-                g_hash_table_iter_init(&iter, app_notification_map);
-                while (g_hash_table_iter_next(&iter, &key, &value)) {
-                    if (GPOINTER_TO_UINT(value) == id) {
-                        g_hash_table_iter_remove(&iter);
-                        break;
-                    }
-                }
-            }
+            g_free(n->app_name);
+            g_free(n->icon_path);
             g_free(n);
             reposition_notifications();
             
@@ -344,70 +336,119 @@ void close_notification(guint32 id, guint reason) {
     }
 }
 
-// --- إنشاء الإشعار وعرضه ---
-void create_new_notification(const char *app_name, const char *summary, const char *body, const char *icon, GVariant *actions, gint timeout) {
-    if (!app_notification_map) app_notification_map = g_hash_table_new_full(g_str_hash, g_str_equal, g_free, NULL);
-    
-    // إذا كان وضع عدم الإزعاج مفعل، أضف للسجل بشكل صامت فقط
-    if (do_not_disturb) {
-        // ابحث عن إشعار سابق من نفس التطبيق في السجل
-        gboolean found = FALSE;
-        for (GList *l = history_list; l != NULL; l = l->next) {
-            NotificationItem *item = (NotificationItem *)l->data;
-            if (g_strcmp0(item->app_name, app_name) == 0) {
-                // استبدل الإشعار بدلاً من إضافة واحد جديد
-                g_free(item->summary);
-                g_free(item->body);
-                item->summary = g_strdup(summary);
-                item->body = g_strdup(body);
-                item->timestamp = time(NULL);
-                emit_history_updated_signal(NULL);
-                found = TRUE;
-                break;
-            }
-        }
-        // إذا لم نجد واحداً، أضف واحداً جديداً
-        if (!found) {
-            add_to_history(id_counter++, app_name, icon, summary, body);
-            emit_history_updated_signal(NULL);
-        }
+static void update_notification_icon(GtkWidget *image, const char *icon) {
+    if (!GTK_IS_IMAGE(image)) {
         return;
     }
-    
-    // البحث عن إشعار سابق من نفس التطبيق البحث عن إشعار سابق من نفس التطبيق
-    gpointer existing_id_ptr = g_hash_table_lookup(app_notification_map, app_name);
-    guint32 existing_id = 0;
-    VenomNotification *existing_notification = NULL;
-    
-    if (existing_id_ptr) {
-        existing_id = GPOINTER_TO_UINT(existing_id_ptr);
-        // ابحث عن الإشعار الموجود
-        for (GList *l = active_notifications; l != NULL; l = l->next) {
-            VenomNotification *n = (VenomNotification *)l->data;
-            if (n->id == existing_id) {
-                existing_notification = n;
-                break;
+
+    if (icon && strlen(icon) > 0) {
+        if (g_path_is_absolute(icon) || g_file_test(icon, G_FILE_TEST_EXISTS)) {
+            GdkPixbuf *pixbuf = gdk_pixbuf_new_from_file_at_scale(icon, 48, 48, TRUE, NULL);
+            if (pixbuf) {
+                gtk_image_set_from_pixbuf(GTK_IMAGE(image), pixbuf);
+                g_object_unref(pixbuf);
+                return;
             }
+        } else {
+            gtk_image_set_from_icon_name(GTK_IMAGE(image), icon, GTK_ICON_SIZE_DIALOG);
+            gtk_image_set_pixel_size(GTK_IMAGE(image), 48);
+            return;
         }
     }
-    
-    // إذا وجدنا إشعار سابق، حدثه بدلاً من إنشاء واحد جديد
+
+    gtk_image_set_from_icon_name(GTK_IMAGE(image), "dialog-information", GTK_ICON_SIZE_DIALOG);
+    gtk_image_set_pixel_size(GTK_IMAGE(image), 48);
+}
+
+static void update_notification_content(VenomNotification *notification, const char *icon, const char *summary, const char *body) {
+    if (!notification) {
+        return;
+    }
+
+    g_free(notification->icon_path);
+    notification->icon_path = g_strdup(icon);
+    update_notification_icon(notification->icon_img, icon);
+
+    gtk_label_set_text(GTK_LABEL(notification->title_lbl), summary ? summary : "");
+
+    if (notification->body_lbl) {
+        if (body && strlen(body) > 0) {
+            GError *error = NULL;
+            if (pango_parse_markup(body, -1, 0, NULL, NULL, NULL, &error)) {
+                gtk_label_set_markup(GTK_LABEL(notification->body_lbl), body);
+            } else {
+                gtk_label_set_text(GTK_LABEL(notification->body_lbl), body);
+                g_clear_error(&error);
+            }
+            gtk_widget_show(notification->body_lbl);
+        } else {
+            gtk_label_set_text(GTK_LABEL(notification->body_lbl), "");
+            gtk_widget_hide(notification->body_lbl);
+        }
+    }
+
+    gtk_widget_show_all(notification->win);
+    gtk_window_resize(GTK_WINDOW(notification->win), NOTIFY_WIDTH, 1);
+    reposition_notifications();
+}
+
+// --- إنشاء الإشعار وعرضه ---
+static guint32 create_new_notification(const char *app_name, guint32 replaces_id, const char *summary, const char *body, const char *icon, GVariant *actions, gint timeout) {
+    // إذا كان وضع عدم الإزعاج مفعل، أضف للسجل بشكل صامت فقط
+    if (do_not_disturb) {
+        NotificationItem *existing_item = replaces_id ? find_history_item_by_id(replaces_id) : NULL;
+        if (existing_item) {
+            g_free(existing_item->app_name);
+            g_free(existing_item->icon_path);
+            g_free(existing_item->summary);
+            g_free(existing_item->body);
+            existing_item->app_name = g_strdup(app_name);
+            existing_item->icon_path = g_strdup(icon);
+            existing_item->summary = g_strdup(summary);
+            existing_item->body = g_strdup(body);
+            existing_item->timestamp = time(NULL);
+            emit_history_updated_signal(NULL);
+            return existing_item->id;
+        }
+
+        guint32 new_id = id_counter++;
+        add_to_history(new_id, app_name, icon, summary, body);
+        emit_history_updated_signal(NULL);
+        return new_id;
+    }
+
+    VenomNotification *existing_notification = replaces_id ? find_active_notification_by_id(replaces_id) : NULL;
     if (existing_notification) {
-        // استبدل في السجل
-        replace_in_history(app_name, icon, summary, body);
-        // أعد ضبط المؤقت
+        NotificationItem *existing_item = find_history_item_by_id(existing_notification->id);
+        if (existing_item) {
+            g_free(existing_item->app_name);
+            g_free(existing_item->icon_path);
+            g_free(existing_item->summary);
+            g_free(existing_item->body);
+            existing_item->app_name = g_strdup(app_name);
+            existing_item->icon_path = g_strdup(icon);
+            existing_item->summary = g_strdup(summary);
+            existing_item->body = g_strdup(body);
+            existing_item->timestamp = time(NULL);
+        }
+
+        g_free(existing_notification->app_name);
+        existing_notification->app_name = g_strdup(app_name);
+        update_notification_content(existing_notification, icon, summary, body);
+
         if (existing_notification->timeout_source > 0) {
             g_source_remove(existing_notification->timeout_source);
         }
         if (timeout <= 0) timeout = DEFAULT_TIMEOUT;
-        existing_notification->timeout_source = g_timeout_add(timeout, on_timeout, GUINT_TO_POINTER(existing_id));
-        // أرسل إشارة التحديث
+        existing_notification->timeout_source = g_timeout_add(timeout, on_timeout, GUINT_TO_POINTER(existing_notification->id));
         emit_history_updated_signal(NULL);
-        return;
+        return existing_notification->id;
     }
 
     VenomNotification *n = g_new0(VenomNotification, 1);
     n->id = id_counter++;
+    n->app_name = g_strdup(app_name);
+    n->icon_path = g_strdup(icon);
 
     // إنشاء النافذة
     n->win = gtk_window_new(GTK_WINDOW_TOPLEVEL);
@@ -463,6 +504,7 @@ void create_new_notification(const char *app_name, const char *summary, const ch
         }
     }
     if (!icon_img) icon_img = gtk_image_new_from_icon_name("dialog-information", GTK_ICON_SIZE_DIALOG);
+    n->icon_img = icon_img;
     
     gtk_box_pack_start(GTK_BOX(main_hbox), icon_img, FALSE, FALSE, 0);
     gtk_widget_set_valign(icon_img, GTK_ALIGN_START);
@@ -474,6 +516,7 @@ void create_new_notification(const char *app_name, const char *summary, const ch
 
     // العنوان
     GtkWidget *title_lbl = gtk_label_new(summary);
+    n->title_lbl = title_lbl;
     gtk_label_set_xalign(GTK_LABEL(title_lbl), 0.0);
     gtk_label_set_line_wrap(GTK_LABEL(title_lbl), TRUE);
     gtk_label_set_line_wrap_mode(GTK_LABEL(title_lbl), PANGO_WRAP_WORD_CHAR);
@@ -482,8 +525,9 @@ void create_new_notification(const char *app_name, const char *summary, const ch
     gtk_box_pack_start(GTK_BOX(vbox), title_lbl, FALSE, FALSE, 0);
 
     // المحتوى
+    GtkWidget *body_lbl = gtk_label_new(NULL);
+    n->body_lbl = body_lbl;
     if (body && strlen(body) > 0) {
-        GtkWidget *body_lbl = gtk_label_new(NULL);
         // تفعيل قراءة وسوم Pango (مثل البولد والروابط) التي ترسلها بعض التطبيقات
         // التحقق مما إذا كان النص يحتوي على وسوم صالحة
         GError *error = NULL;
@@ -499,9 +543,11 @@ void create_new_notification(const char *app_name, const char *summary, const ch
         gtk_label_set_line_wrap(GTK_LABEL(body_lbl), TRUE);
         gtk_label_set_line_wrap_mode(GTK_LABEL(body_lbl), PANGO_WRAP_WORD_CHAR);
         gtk_label_set_max_width_chars(GTK_LABEL(body_lbl), 32);
-        gtk_style_context_add_class(gtk_widget_get_style_context(body_lbl), "notify-body");
-        gtk_box_pack_start(GTK_BOX(vbox), body_lbl, FALSE, FALSE, 0);
+    } else {
+        gtk_widget_hide(body_lbl);
     }
+    gtk_style_context_add_class(gtk_widget_get_style_context(body_lbl), "notify-body");
+    gtk_box_pack_start(GTK_BOX(vbox), body_lbl, FALSE, FALSE, 0);
 
     // 3. الأزرار (Actions)
     if (actions && g_variant_n_children(actions) > 0) {
@@ -536,7 +582,6 @@ void create_new_notification(const char *app_name, const char *summary, const ch
     gtk_window_resize(GTK_WINDOW(n->win), NOTIFY_WIDTH, 1);
     
     active_notifications = g_list_append(active_notifications, n);
-    g_hash_table_insert(app_notification_map, g_strdup(app_name), GUINT_TO_POINTER(n->id));
     
     // إضافة الإشعار للسجل
     add_to_history(n->id, app_name, icon, summary, body);
@@ -548,6 +593,7 @@ void create_new_notification(const char *app_name, const char *summary, const ch
 
     if (timeout <= 0) timeout = DEFAULT_TIMEOUT;
     n->timeout_source = g_timeout_add(timeout, on_timeout, GUINT_TO_POINTER(n->id));
+    return n->id;
 }
 
 // --- معالجة اتصالات D-Bus ---
@@ -570,12 +616,12 @@ static void handle_method_call(GDBusConnection *connection, const gchar *sender,
                       &app_name, &replaces_id, &app_icon, 
                       &summary, &body, &actions, &hints, &expire_timeout);
 
-        create_new_notification(app_name, summary, body, app_icon, actions, expire_timeout);
+        guint32 notification_id = create_new_notification(app_name, replaces_id, summary, body, app_icon, actions, expire_timeout);
         
         // إخبار الكونترول سنتر بتحديث السجل
         emit_history_updated_signal(connection);
         
-        g_dbus_method_invocation_return_value(invocation, g_variant_new("(u)", id_counter - 1));
+        g_dbus_method_invocation_return_value(invocation, g_variant_new("(u)", notification_id));
 
         g_free(app_name); g_free(app_icon); g_free(summary); g_free(body);
         if (actions) g_variant_unref(actions);
