@@ -164,7 +164,7 @@ void on_launcher_clicked(GtkWidget *widget, gpointer data) {
     
     if (!is_standalone) {
         GError *error = NULL;
-        gchar *argv[] = {"vaxp-launcher", NULL};
+        gchar *argv[] = {"aether-launcher", NULL};
         if (!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, &error)) {
              g_warning("Failed to spawn launcher: %s", error->message);
              g_error_free(error);
