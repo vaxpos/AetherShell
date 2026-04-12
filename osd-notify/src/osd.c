@@ -6,6 +6,7 @@
 #if defined(GDK_WINDOWING_WAYLAND)
 #include <gdk/gdkwayland.h>
 #endif
+#include <wayland-client.h>
 #include <xkbcommon/xkbregistry.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +22,8 @@
 // PulseAudio
 #include <pulse/pulseaudio.h>
 #include <pulse/glib-mainloop.h>
+
+#include "aether-ipc-v1-client-protocol.h"
 
 // إعدادات المظهر
 #define OSD_WIDTH 200
@@ -46,6 +49,14 @@ GOutputStream *wayfire_output = NULL;
 GByteArray *wayfire_buffer = NULL;
 guint wayfire_io_watch_id = 0;
 guint wayfire_reconnect_id = 0;
+
+// Aether Wayland IPC globals
+gboolean aether_global_warned = FALSE;
+struct wl_display *aether_display = NULL;
+struct wl_registry *aether_registry = NULL;
+struct aether_ipc_manager_v1 *aether_manager = NULL;
+guint aether_io_watch_id = 0;
+guint aether_reconnect_id = 0;
 
 // GTK globals
 GtkWidget *window = NULL;
@@ -90,7 +101,13 @@ static gboolean handle_wayfire_message(JsonObject *obj, gboolean show_popup);
 static gboolean process_wayfire_buffer(gboolean show_popup);
 static gboolean send_wayfire_request(const char *json);
 static void update_layouts_from_json_array(JsonArray *layouts);
+static gboolean update_layouts_from_delimited_string(const char *layouts, char separator);
+static gboolean apply_keyboard_layout_state(int current, gboolean show_popup);
 static void setup_keyboard_monitoring(void);
+static gboolean connect_aether_ipc(void);
+static void disconnect_aether_ipc(void);
+static gboolean schedule_aether_reconnect(gpointer data);
+static gboolean on_aether_display_event(gint fd, GIOCondition condition, gpointer data);
 static gboolean is_wayland_session(void);
 static void update_osd_position(int width, int height);
 static void apply_input_passthrough(void);
@@ -386,6 +403,10 @@ static void setup_keyboard_monitoring(void) {
     if (!connect_wayfire_ipc() && !wayfire_reconnect_id) {
         wayfire_reconnect_id = g_timeout_add(1000, schedule_wayfire_reconnect, NULL);
     }
+
+    if (is_wayland_session() && !connect_aether_ipc() && !aether_reconnect_id) {
+        aether_reconnect_id = g_timeout_add(1000, schedule_aether_reconnect, NULL);
+    }
 }
 
 static void update_layouts_from_json_array(JsonArray *layouts) {
@@ -412,6 +433,64 @@ static void update_layouts_from_json_array(JsonArray *layouts) {
     }
 }
 
+static gboolean update_layouts_from_delimited_string(const char *layouts, char separator) {
+    if (!layouts || !layouts[0]) return FALSE;
+
+    memset(loaded_layouts, 0, sizeof(loaded_layouts));
+    loaded_layouts_count = 0;
+
+    const char *cursor = layouts;
+    while (*cursor && loaded_layouts_count < 8) {
+        const char *end = strchr(cursor, separator);
+        gsize len = end ? (gsize)(end - cursor) : strlen(cursor);
+
+        if (len > 0) {
+            gchar *layout_name = g_strndup(cursor, len);
+            g_strstrip(layout_name);
+
+            if (layout_name[0]) {
+                const char *brief = brief_layout_name(layout_name);
+                const char *display_name = display_layout_name(brief && brief[0] ? brief : layout_name);
+                if (display_name && display_name[0]) {
+                    g_strlcpy(loaded_layouts[loaded_layouts_count], display_name, sizeof(loaded_layouts[0]));
+                } else {
+                    g_strlcpy(loaded_layouts[loaded_layouts_count], layout_name, sizeof(loaded_layouts[0]));
+                }
+
+                normalize_layout_name(loaded_layouts[loaded_layouts_count]);
+                loaded_layouts_count++;
+            }
+
+            g_free(layout_name);
+        }
+
+        if (!end) break;
+        cursor = end + 1;
+    }
+
+    return loaded_layouts_count > 0;
+}
+
+static gboolean apply_keyboard_layout_state(int current, gboolean show_popup) {
+    if (loaded_layouts_count <= 0) return FALSE;
+    if (current < 0 || current >= loaded_layouts_count) return FALSE;
+
+    if (current == current_layout_index &&
+        g_strcmp0(current_text, loaded_layouts[current]) == 0) {
+        return TRUE;
+    }
+
+    current_layout_index = current;
+    g_strlcpy(current_text, loaded_layouts[current_layout_index], sizeof(current_text));
+    current_osd_type = OSD_KEYBOARD;
+
+    if (show_popup) {
+        show_osd();
+    }
+
+    return TRUE;
+}
+
 static gboolean handle_wayfire_message(JsonObject *obj, gboolean show_popup) {
     if (!obj) return FALSE;
     if (json_object_has_member(obj, "error")) return FALSE;
@@ -434,25 +513,7 @@ static gboolean handle_wayfire_message(JsonObject *obj, gboolean show_popup) {
 
     JsonArray *layouts = json_object_get_array_member(state, "possible-layouts");
     update_layouts_from_json_array(layouts);
-    if (loaded_layouts_count <= 0) return FALSE;
-
-    int current = json_object_get_int_member(state, "layout-index");
-    if (current < 0 || current >= loaded_layouts_count) return FALSE;
-
-    if (current == current_layout_index &&
-        g_strcmp0(current_text, loaded_layouts[current]) == 0) {
-        return TRUE;
-    }
-
-    current_layout_index = current;
-    g_strlcpy(current_text, loaded_layouts[current_layout_index], sizeof(current_text));
-    current_osd_type = OSD_KEYBOARD;
-
-    if (show_popup) {
-        show_osd();
-    }
-
-    return TRUE;
+    return apply_keyboard_layout_state(json_object_get_int_member(state, "layout-index"), show_popup);
 }
 
 static gboolean process_wayfire_buffer(gboolean show_popup) {
@@ -639,6 +700,178 @@ static gboolean on_wayfire_socket_event(gint fd, GIOCondition condition, gpointe
     }
 
     process_wayfire_buffer(TRUE);
+    return G_SOURCE_CONTINUE;
+}
+
+static void aether_handle_keyboard_state(void *data,
+    struct aether_ipc_manager_v1 *manager,
+    const char *layouts,
+    int32_t layout_index) {
+    (void)data;
+    (void)manager;
+
+    if (!update_layouts_from_delimited_string(layouts, '\n')) return;
+    apply_keyboard_layout_state(layout_index, TRUE);
+}
+
+static void aether_handle_workspace_state(void *data,
+    struct aether_ipc_manager_v1 *manager,
+    int32_t output_id,
+    int32_t x,
+    int32_t y,
+    int32_t grid_width,
+    int32_t grid_height) {
+    (void)data;
+    (void)manager;
+    (void)output_id;
+    (void)x;
+    (void)y;
+    (void)grid_width;
+    (void)grid_height;
+}
+
+static const struct aether_ipc_manager_v1_listener aether_manager_listener = {
+    .workspace_state = aether_handle_workspace_state,
+    .keyboard_state = aether_handle_keyboard_state,
+};
+
+static void aether_registry_global(void *data,
+    struct wl_registry *registry,
+    uint32_t name,
+    const char *interface,
+    uint32_t version) {
+    (void)data;
+
+    if (g_strcmp0(interface, aether_ipc_manager_v1_interface.name) != 0 || aether_manager) {
+        return;
+    }
+
+    uint32_t bind_version = version < 1 ? version : 1;
+    aether_manager = wl_registry_bind(registry, name, &aether_ipc_manager_v1_interface, bind_version);
+    if (aether_manager) {
+        aether_ipc_manager_v1_add_listener(aether_manager, &aether_manager_listener, NULL);
+        aether_global_warned = FALSE;
+    }
+}
+
+static void aether_registry_global_remove(void *data, struct wl_registry *registry, uint32_t name) {
+    (void)data;
+    (void)registry;
+    (void)name;
+}
+
+static const struct wl_registry_listener aether_registry_listener = {
+    .global = aether_registry_global,
+    .global_remove = aether_registry_global_remove,
+};
+
+static void disconnect_aether_ipc(void) {
+    if (aether_io_watch_id) {
+        g_source_remove(aether_io_watch_id);
+        aether_io_watch_id = 0;
+    }
+
+    if (aether_manager) {
+        aether_ipc_manager_v1_destroy(aether_manager);
+        aether_manager = NULL;
+    }
+
+    if (aether_registry) {
+        wl_registry_destroy(aether_registry);
+        aether_registry = NULL;
+    }
+
+    if (aether_display) {
+        wl_display_disconnect(aether_display);
+        aether_display = NULL;
+    }
+}
+
+static gboolean schedule_aether_reconnect(gpointer data) {
+    (void)data;
+    aether_reconnect_id = 0;
+    return connect_aether_ipc() ? G_SOURCE_REMOVE : G_SOURCE_CONTINUE;
+}
+
+static gboolean connect_aether_ipc(void) {
+    if (aether_display) return TRUE;
+    if (!is_wayland_session()) return FALSE;
+
+    aether_display = wl_display_connect(NULL);
+    if (!aether_display) {
+        if (!aether_global_warned) {
+            g_warning("[OSD] Failed to connect to Wayland display for Aether IPC");
+            aether_global_warned = TRUE;
+        }
+        return FALSE;
+    }
+
+    aether_registry = wl_display_get_registry(aether_display);
+    if (!aether_registry) {
+        g_warning("[OSD] Failed to get Wayland registry for Aether IPC");
+        disconnect_aether_ipc();
+        return FALSE;
+    }
+
+    wl_registry_add_listener(aether_registry, &aether_registry_listener, NULL);
+
+    if (wl_display_roundtrip(aether_display) < 0) {
+        g_warning("[OSD] Failed initial Wayland roundtrip for Aether IPC");
+        disconnect_aether_ipc();
+        return FALSE;
+    }
+
+    if (!aether_manager) {
+        if (!aether_global_warned) {
+            g_warning("[OSD] aether_ipc_manager_v1 not advertised; Aether keyboard OSD disabled");
+            aether_global_warned = TRUE;
+        }
+        disconnect_aether_ipc();
+        return FALSE;
+    }
+
+    if (wl_display_roundtrip(aether_display) < 0) {
+        g_warning("[OSD] Failed to receive initial Aether IPC state");
+        disconnect_aether_ipc();
+        return FALSE;
+    }
+
+    int fd = wl_display_get_fd(aether_display);
+    if (fd < 0) {
+        g_warning("[OSD] Failed to get Wayland fd for Aether IPC");
+        disconnect_aether_ipc();
+        return FALSE;
+    }
+
+    aether_io_watch_id = g_unix_fd_add(fd,
+        G_IO_IN | G_IO_HUP | G_IO_ERR | G_IO_NVAL, on_aether_display_event, NULL);
+    aether_global_warned = FALSE;
+    return TRUE;
+}
+
+static gboolean on_aether_display_event(gint fd, GIOCondition condition, gpointer data) {
+    (void)fd;
+    (void)data;
+
+    if (!aether_display) return G_SOURCE_REMOVE;
+
+    if (condition & (G_IO_HUP | G_IO_ERR | G_IO_NVAL)) {
+        disconnect_aether_ipc();
+        if (!aether_reconnect_id) {
+            aether_reconnect_id = g_timeout_add(1000, schedule_aether_reconnect, NULL);
+        }
+        return G_SOURCE_REMOVE;
+    }
+
+    if (wl_display_dispatch(aether_display) < 0) {
+        g_warning("[OSD] Aether IPC dispatch failed");
+        disconnect_aether_ipc();
+        if (!aether_reconnect_id) {
+            aether_reconnect_id = g_timeout_add(1000, schedule_aether_reconnect, NULL);
+        }
+        return G_SOURCE_REMOVE;
+    }
+
     return G_SOURCE_CONTINUE;
 }
 
