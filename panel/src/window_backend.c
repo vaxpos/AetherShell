@@ -5,6 +5,7 @@
 #ifdef GDK_WINDOWING_X11
 #include <gdk/gdkx.h>
 #include <X11/Xlib.h>
+#include <X11/Xatom.h>
 #endif
 
 typedef struct {
@@ -20,6 +21,9 @@ typedef enum {
     PANEL_BACKEND_WAYLAND
 } PanelBackendType;
 
+/* Forward declarations */
+static WindowBackendState *get_backend_state(GtkWindow *window);
+
 static PanelBackendType detected_backend = PANEL_BACKEND_UNKNOWN;
 
 /* ─── X11 exclusive-zone emulation ───────────────────────────────────
@@ -29,13 +33,110 @@ static PanelBackendType detected_backend = PANEL_BACKEND_UNKNOWN;
  * window's top-y coordinate so it never overlaps the panel.
  * ──────────────────────────────────────────────────────────────────── */
 static gint s_x11_exclusive_zone = 0; /* panel bar height on X11 */
+static GtkWindow *s_x11_panel_window = NULL; /* the panel bar window */
+
+/* ─── EWMH struts: tell the WM to reserve space for the panel ─────────
+ * Without _NET_WM_STRUT_PARTIAL the window manager does NOT know that
+ * the panel is a dock and happily maximises application windows under it.
+ * We must set these atoms ourselves because gtk-layer-shell does this
+ * automatically on Wayland but nothing does it for us on X11.
+ * ──────────────────────────────────────────────────────────────────── */
+static void x11_apply_struts(GtkWindow *window) {
+#ifdef GDK_WINDOWING_X11
+    WindowBackendState *state;
+    GdkWindow         *gdk_win;
+    GdkDisplay        *display;
+    GdkMonitor        *monitor = NULL;
+    GdkRectangle       geometry = {0};
+    GtkAllocation      alloc    = {0};
+    gulong             strut[12]      = {0};
+    gulong             simple_strut[4] = {0};
+    int                thickness;
+
+    if (!window || panel_window_backend_is_wayland()) return;
+
+    state   = get_backend_state(window);
+    gdk_win = gtk_widget_get_window(GTK_WIDGET(window));
+    if (!gdk_win || !GDK_IS_X11_WINDOW(gdk_win)) return;
+
+    display = gdk_window_get_display(gdk_win);
+    if (!display) return;
+
+    monitor = gdk_display_get_monitor_at_window(display, gdk_win);
+    if (!monitor) monitor = gdk_display_get_primary_monitor(display);
+    if (!monitor && gdk_display_get_n_monitors(display) > 0)
+        monitor = gdk_display_get_monitor(display, 0);
+    if (!monitor) return;
+
+    gdk_monitor_get_geometry(monitor, &geometry);
+    gtk_widget_get_allocation(GTK_WIDGET(window), &alloc);
+
+    /* Determine which edge the panel is on and its thickness. */
+    if (state && state->anchors[GTK_LAYER_SHELL_EDGE_TOP] &&
+        !state->anchors[GTK_LAYER_SHELL_EDGE_BOTTOM]) {
+        /* TOP panel */
+        thickness = (alloc.height > 1) ? alloc.height : s_x11_exclusive_zone;
+        strut[2]  = (gulong)(geometry.y + thickness);   /* top */
+        strut[8]  = (gulong)geometry.x;
+        strut[9]  = (gulong)(geometry.x + geometry.width - 1);
+        simple_strut[2] = (gulong)(geometry.y + thickness);
+    } else if (state && state->anchors[GTK_LAYER_SHELL_EDGE_BOTTOM] &&
+               !state->anchors[GTK_LAYER_SHELL_EDGE_TOP]) {
+        /* BOTTOM panel */
+        thickness = (alloc.height > 1) ? alloc.height : s_x11_exclusive_zone;
+        strut[3]  = (gulong)thickness;  /* bottom */
+        strut[10] = (gulong)geometry.x;
+        strut[11] = (gulong)(geometry.x + geometry.width - 1);
+        simple_strut[3] = (gulong)thickness;
+    } else if (state && state->anchors[GTK_LAYER_SHELL_EDGE_LEFT] &&
+               !state->anchors[GTK_LAYER_SHELL_EDGE_RIGHT]) {
+        /* LEFT panel */
+        thickness = (alloc.width > 1) ? alloc.width : s_x11_exclusive_zone;
+        strut[0] = (gulong)thickness;   /* left */
+        strut[4] = (gulong)geometry.y;
+        strut[5] = (gulong)(geometry.y + geometry.height - 1);
+        simple_strut[0] = (gulong)thickness;
+    } else if (state && state->anchors[GTK_LAYER_SHELL_EDGE_RIGHT] &&
+               !state->anchors[GTK_LAYER_SHELL_EDGE_LEFT]) {
+        /* RIGHT panel */
+        thickness = (alloc.width > 1) ? alloc.width : s_x11_exclusive_zone;
+        strut[1] = (gulong)thickness;   /* right */
+        strut[6] = (gulong)geometry.y;
+        strut[7] = (gulong)(geometry.y + geometry.height - 1);
+        simple_strut[1] = (gulong)thickness;
+    } else {
+        return; /* undetermined edge — skip */
+    }
+
+    gdk_property_change(gdk_win,
+                        gdk_atom_intern("_NET_WM_STRUT_PARTIAL", FALSE),
+                        gdk_atom_intern("CARDINAL", FALSE),
+                        32,
+                        GDK_PROP_MODE_REPLACE,
+                        (guchar *)strut,
+                        12);
+
+    gdk_property_change(gdk_win,
+                        gdk_atom_intern("_NET_WM_STRUT", FALSE),
+                        gdk_atom_intern("CARDINAL", FALSE),
+                        32,
+                        GDK_PROP_MODE_REPLACE,
+                        (guchar *)simple_strut,
+                        4);
+#else
+    (void)window;
+#endif
+}
 
 static void on_x11_panel_size_allocate(GtkWidget *widget,
                                         GtkAllocation *alloc,
                                         gpointer data) {
-    (void)widget; (void)data;
+    (void)data;
     if (alloc->height > 1)
         s_x11_exclusive_zone = alloc->height;
+    /* Re-apply struts every time the panel changes size so the WM always
+     * has accurate reserved-area information. */
+    x11_apply_struts(GTK_WINDOW(widget));
 }
 
 static WindowBackendState *get_backend_state(GtkWindow *window) {
@@ -201,6 +302,10 @@ static void on_backend_window_realize(GtkWidget *widget, gpointer user_data) {
 
     if (panel_window_backend_is_wayland()) return;
     sync_x11_window_position(GTK_WINDOW(widget));
+    /* Apply EWMH struts now that we have a real X11 window handle.
+     * The allocation may still be 1×1 here; on_x11_panel_size_allocate
+     * will re-apply with the correct dimensions once the widget is laid out. */
+    x11_apply_struts(GTK_WINDOW(widget));
 }
 
 /* ─── Popup windows: override_redirect bypass + position sync ─────────
@@ -253,8 +358,16 @@ static void init_x11_window(GtkWindow *window) {
 
     gtk_window_set_skip_taskbar_hint(window, TRUE);
     gtk_window_set_skip_pager_hint(window, TRUE);
+    /* keep_above asks the WM politely; struts are the authoritative way
+     * to reserve space and keep app windows from overlapping the panel. */
     gtk_window_set_keep_above(window, TRUE);
+    gtk_window_set_accept_focus(window, TRUE);
+    gtk_window_set_focus_on_map(window, FALSE);
     gtk_window_stick(window);
+
+    /* Set DOCK type hint at the GDK level so WMs that read it before
+     * realize can act appropriately. */
+    gtk_window_set_type_hint(window, GDK_WINDOW_TYPE_HINT_DOCK);
 
     geo.min_width  = 0;
     geo.min_height = 0;
@@ -262,6 +375,8 @@ static void init_x11_window(GtkWindow *window) {
 
     g_signal_connect(window, "realize", G_CALLBACK(on_backend_window_realize), NULL);
     g_signal_connect(window, "destroy", G_CALLBACK(on_backend_window_destroy), NULL);
+
+    s_x11_panel_window = window;
 }
 
 /* Used for ALL popup windows (control center, sidebar, app menu, …).
@@ -369,12 +484,14 @@ void panel_window_backend_auto_exclusive_zone_enable(GtkWindow *window) {
     if (panel_window_backend_is_wayland()) {
         gtk_layer_auto_exclusive_zone_enable(window);
     } else {
-        /* On X11: track the panel bar's height so popup windows can be
-         * positioned below it (exclusive-zone emulation). */
+        /* On X11: track the panel bar's height for exclusive-zone emulation
+         * AND update EWMH struts whenever the panel size changes. */
         GtkAllocation alloc;
         gtk_widget_get_allocation(GTK_WIDGET(window), &alloc);
         if (alloc.height > 1)
             s_x11_exclusive_zone = alloc.height;
+        /* size-allocate fires after every layout pass — perfect for keeping
+         * struts in sync with the actual rendered panel size. */
         g_signal_connect(GTK_WIDGET(window), "size-allocate",
                          G_CALLBACK(on_x11_panel_size_allocate), NULL);
     }
