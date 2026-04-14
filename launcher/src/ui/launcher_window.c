@@ -245,19 +245,39 @@ venom_launcher_window_class_init (VenomLauncherWindowClass *klass)
     obj_class->finalize = venom_launcher_window_finalize;
 }
 
+static gboolean
+is_wayland_session(void)
+{
+    GdkDisplay *display = gdk_display_get_default();
+    if (display) {
+        const char *name = G_OBJECT_TYPE_NAME(display);
+        if (name && g_str_has_prefix(name, "GdkWayland")) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 static void
 venom_launcher_window_init (VenomLauncherWindow *self)
 {
     GtkWindow *win = GTK_WINDOW (self);
 
-    gtk_layer_init_for_window (win);
-    gtk_layer_set_namespace (win, "launcher");
-    gtk_layer_set_layer (win, GTK_LAYER_SHELL_LAYER_OVERLAY);
-    gtk_layer_set_anchor (win, GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
-    gtk_layer_set_anchor (win, GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
-    gtk_layer_set_anchor (win, GTK_LAYER_SHELL_EDGE_TOP, TRUE);
-    gtk_layer_set_anchor (win, GTK_LAYER_SHELL_EDGE_BOTTOM, TRUE);
-    gtk_layer_set_keyboard_mode (win, GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE);
+    if (is_wayland_session()) {
+        gtk_layer_init_for_window (win);
+        gtk_layer_set_namespace (win, "launcher");
+        gtk_layer_set_layer (win, GTK_LAYER_SHELL_LAYER_OVERLAY);
+        gtk_layer_set_anchor (win, GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
+        gtk_layer_set_anchor (win, GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+        gtk_layer_set_anchor (win, GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+        gtk_layer_set_anchor (win, GTK_LAYER_SHELL_EDGE_BOTTOM, TRUE);
+        gtk_layer_set_keyboard_mode (win, GTK_LAYER_SHELL_KEYBOARD_MODE_EXCLUSIVE);
+    } else {
+        /* X11 fallback */
+        gtk_window_set_keep_above (win, TRUE);
+        gtk_window_set_position (win, GTK_WIN_POS_CENTER_ALWAYS);
+        gtk_window_fullscreen (win);
+    }
 
     gtk_window_set_decorated         (win, FALSE);
     gtk_window_set_skip_taskbar_hint (win, TRUE);

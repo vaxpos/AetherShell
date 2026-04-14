@@ -32,6 +32,17 @@ static gboolean is_image_file(const char *name);
 static void add_images_from_dir(const char *dir_path, GtkWidget *flow);
 static void on_browse_folder_clicked(GtkButton *btn, gpointer user_data);
 
+static gboolean is_wayland_session(void) {
+    GdkDisplay *display = gdk_display_get_default();
+    if (display) {
+        const char *name = G_OBJECT_TYPE_NAME(display);
+        if (name && g_str_has_prefix(name, "GdkWayland")) {
+            return TRUE;
+        }
+    }
+    return FALSE;
+}
+
 static void load_wallpaper(const char *path) {
     GError *err = NULL;
     GdkPixbuf *pb;
@@ -118,7 +129,11 @@ static void update_desktop_geometry(void) {
     screen_w = r.width;
     screen_h = r.height;
 
-    gtk_layer_set_monitor(GTK_WINDOW(main_window), monitor);
+    if (is_wayland_session()) {
+        gtk_layer_set_monitor(GTK_WINDOW(main_window), monitor);
+    } else {
+        gtk_window_move(GTK_WINDOW(main_window), r.x, r.y);
+    }
     gtk_window_set_default_size(GTK_WINDOW(main_window), screen_w, screen_h);
     gtk_window_resize(GTK_WINDOW(main_window), screen_w, screen_h);
     gtk_widget_set_size_request(icon_layout, screen_w, screen_h);
@@ -173,15 +188,23 @@ void init_main_window(void) {
     gtk_window_set_resizable(GTK_WINDOW(main_window), FALSE);
     gtk_window_set_accept_focus(GTK_WINDOW(main_window), FALSE);
 
-    gtk_layer_init_for_window(GTK_WINDOW(main_window));
-    gtk_layer_set_namespace(GTK_WINDOW(main_window), "desktop");
-    gtk_layer_set_layer(GTK_WINDOW(main_window), GTK_LAYER_SHELL_LAYER_BACKGROUND);
-    gtk_layer_set_anchor(GTK_WINDOW(main_window), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(main_window), GTK_LAYER_SHELL_EDGE_BOTTOM, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(main_window), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
-    gtk_layer_set_anchor(GTK_WINDOW(main_window), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
-    gtk_layer_set_keyboard_mode(GTK_WINDOW(main_window), GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
-    gtk_layer_set_exclusive_zone(GTK_WINDOW(main_window), -1);
+    if (is_wayland_session()) {
+        gtk_layer_init_for_window(GTK_WINDOW(main_window));
+        gtk_layer_set_namespace(GTK_WINDOW(main_window), "desktop");
+        gtk_layer_set_layer(GTK_WINDOW(main_window), GTK_LAYER_SHELL_LAYER_BACKGROUND);
+        gtk_layer_set_anchor(GTK_WINDOW(main_window), GTK_LAYER_SHELL_EDGE_TOP, TRUE);
+        gtk_layer_set_anchor(GTK_WINDOW(main_window), GTK_LAYER_SHELL_EDGE_BOTTOM, TRUE);
+        gtk_layer_set_anchor(GTK_WINDOW(main_window), GTK_LAYER_SHELL_EDGE_LEFT, TRUE);
+        gtk_layer_set_anchor(GTK_WINDOW(main_window), GTK_LAYER_SHELL_EDGE_RIGHT, TRUE);
+        gtk_layer_set_keyboard_mode(GTK_WINDOW(main_window), GTK_LAYER_SHELL_KEYBOARD_MODE_NONE);
+        gtk_layer_set_exclusive_zone(GTK_WINDOW(main_window), -1);
+    } else {
+        gtk_window_set_type_hint(GTK_WINDOW(main_window), GDK_WINDOW_TYPE_HINT_DESKTOP);
+        gtk_window_set_keep_below(GTK_WINDOW(main_window), TRUE);
+        gtk_window_stick(GTK_WINDOW(main_window));
+        gtk_window_set_skip_taskbar_hint(GTK_WINDOW(main_window), TRUE);
+        gtk_window_set_skip_pager_hint(GTK_WINDOW(main_window), TRUE);
+    }
 
     screen = gtk_widget_get_screen(main_window);
     visual = gdk_screen_get_rgba_visual(screen);

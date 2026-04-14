@@ -32,8 +32,6 @@ on_activate (GtkApplication *app, gpointer user_data)
 int
 main (int argc, char *argv[])
 {
-    gdk_set_allowed_backends ("wayland");
-
     GtkApplication *app = gtk_application_new (
         "org.venom.Launcher",
         G_APPLICATION_DEFAULT_FLAGS);
