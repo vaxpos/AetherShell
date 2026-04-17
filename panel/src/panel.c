@@ -182,6 +182,28 @@ static void on_panel_search_clicked(GtkButton *btn, gpointer user_data) {
     }
 }
 
+static void on_panel_clipboard_clicked(GtkButton *btn, gpointer user_data) {
+    GError *error = NULL;
+    gchar *argv[] = {
+        "dbus-send",
+        "--session",
+        "--print-reply",
+        "--dest=org.aether.Clipboard",
+        "/org/aether/Clipboard",
+        "org.aether.Clipboard.Toggle",
+        NULL
+    };
+
+    (void)btn;
+    (void)user_data;
+
+    if (!g_spawn_async(NULL, argv, NULL, G_SPAWN_SEARCH_PATH, NULL, NULL, NULL, &error)) {
+        g_warning("[Panel] Failed to show clipboard: %s",
+                  error ? error->message : "unknown error");
+        if (error) g_error_free(error);
+    }
+}
+
 static void on_panel_screen_changed(GdkScreen *screen, gpointer user_data) {
     GtkWidget *window = GTK_WIDGET(user_data);
     (void)screen;
@@ -253,6 +275,9 @@ int main(int argc, char *argv[]) {
     gtk_box_pack_start(GTK_BOX(panel_bar), hbox, TRUE, TRUE, 0);
 
     // Left side
+    GtkWidget *left_box = gtk_box_new(GTK_ORIENTATION_HORIZONTAL, 0);
+    gtk_widget_set_name(left_box, "status-box");
+
     GtkWidget *menu_btn = gtk_button_new();
     gtk_button_set_relief(GTK_BUTTON(menu_btn), GTK_RELIEF_NONE);
 
@@ -269,12 +294,21 @@ int main(int argc, char *argv[]) {
     gtk_container_add(GTK_CONTAINER(menu_btn), menu_icon);
     app_menu_set_relative_to(app_menu_w, menu_btn);
     g_signal_connect(menu_btn, "clicked", G_CALLBACK(on_panel_cc_toggle_clicked), app_menu_w);
-    
-    gtk_box_pack_start(GTK_BOX(hbox), menu_btn, FALSE, FALSE, 0);
+    gtk_box_pack_start(GTK_BOX(left_box), menu_btn, FALSE, FALSE, 0);
+
+    GtkWidget *clipboard_btn = gtk_button_new();
+    gtk_button_set_relief(GTK_BUTTON(clipboard_btn), GTK_RELIEF_NONE);
+    gtk_widget_set_tooltip_text(clipboard_btn, "Clipboard");
+    GtkWidget *clipboard_icon = gtk_image_new_from_icon_name("edit-paste-symbolic", GTK_ICON_SIZE_MENU);
+    gtk_container_add(GTK_CONTAINER(clipboard_btn), clipboard_icon);
+    g_signal_connect(clipboard_btn, "clicked", G_CALLBACK(on_panel_clipboard_clicked), NULL);
+    gtk_box_pack_start(GTK_BOX(left_box), clipboard_btn, FALSE, FALSE, 0);
+
+    gtk_box_pack_start(GTK_BOX(hbox), left_box, FALSE, FALSE, 0);
 
     // Workspaces
     GtkWidget *workspaces_widget = create_workspaces_widget();
-    gtk_widget_set_margin_start(workspaces_widget, 12);
+    gtk_widget_set_margin_start(workspaces_widget, 8);
     gtk_box_pack_start(GTK_BOX(hbox), workspaces_widget, FALSE, FALSE, 0);
 
     // Center (Time)
