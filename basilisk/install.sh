@@ -6,8 +6,8 @@
 set -e
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
-DAEMON_NAME="venom_basilisk"
-SERVICE_NAME="venom-basilisk.service"
+DAEMON_NAME="basilisk"
+SERVICE_NAME="basilisk.service"
 
 # Colors
 RED='\033[0;31m'
@@ -18,7 +18,7 @@ NC='\033[0m'
 
 echo -e "${CYAN}"
 echo "╔════════════════════════════════════════════════════════════╗"
-echo "║   🔍 Venom Basilisk - Spotlight Launcher Installer         ║"
+echo "║   🔍 Basilisk - Spotlight Launcher Installer         ║"
 echo "╚════════════════════════════════════════════════════════════╝"
 echo -e "${NC}"
 
@@ -66,7 +66,7 @@ su - "$REAL_USER" -c "export XDG_RUNTIME_DIR=/run/user/$USER_ID; systemctl --use
 echo -e "  ${GREEN}✓${NC} Service registered (venom-session will manage activation)"
 
 echo ""
-echo -e "${GREEN}✅ Venom Basilisk installed successfully!${NC}"
+echo -e "${GREEN}✅ Basilisk installed successfully!${NC}"
 echo ""
 echo -e "   ${CYAN}Status:${NC} systemctl --user status $SERVICE_NAME"
 echo ""
@@ -81,4 +81,4 @@ echo "   s:query      - Search Google"
 echo "   ai:question  - Ask Admiral AI"
 echo ""
 echo -e "${CYAN}📋 D-Bus Control:${NC}"
-echo "   dbus-send --session --dest=org.venom.Basilisk /org/venom/Basilisk org.venom.Basilisk.Toggle"
+echo "   dbus-send --session --dest=org.basilisk.Basilisk /org/basilisk/Basilisk org.basilisk.Basilisk.Toggle"

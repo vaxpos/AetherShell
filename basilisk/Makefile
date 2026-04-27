@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -Wall -Wextra -O2 -Iinclude $(shell pkg-config --cflags gtk+-3.0 gio-2.0)
 LDFLAGS = $(shell pkg-config --libs gtk+-3.0 gio-2.0)
 
-TARGET = venom_basilisk
+TARGET = basilisk
 
 SRCS = $(wildcard src/*.c)
 OBJS = $(patsubst src/%.c, obj/%.o, $(SRCS))
